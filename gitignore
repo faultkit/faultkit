@@ -1,0 +1,43 @@
+# Build outputs
+/bin/
+/dist/
+*.exe
+*.test
+*.out
+
+# Go-specific
+/vendor/
+*.prof
+coverage.txt
+coverage.html
+*.cover
+
+# eBPF build artifacts
+# Note: bpf2go-generated .go files ARE committed (per V0.1_SPEC.md §3.1)
+# but the intermediate .o objects are not.
+*.bpf.o
+/internal/inject/ebpf/gen/*.o
+
+# Test artifacts
+/tmp/
+/test/integration/tmp/
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Direnv / env files
+.envrc
+.env
+.env.local
+
+# faultkit-specific runtime artifacts that should never be committed
+# (per-run CAs are written to OS temp dirs, but defensively ignore here too)
+faultkit-ca-*.pem
+*.faultkit-trace
+report.json
