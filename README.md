@@ -1,0 +1,318 @@
+<div align="center">
+
+# faultkit
+
+### Run the error handlers you've never run.
+
+**Fault injection for the agent era. One binary. Zero dependencies.**
+
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+[![Website](https://img.shields.io/badge/website-faultkit.dev-brightgreen.svg)](https://faultkit.dev)
+
+[Install](#install) · [60-second demo](#60-second-demo) · [Scenarios](#scenarios) · [How it works](#how-it-works) · [Docs](https://faultkit.dev/docs)
+
+</div>
+
+> **Status:** v0.1 — two scenarios end-to-end. See [roadmap](#roadmap) for what ships next.
+> **Platforms:** macOS, Linux, Windows for HTTP scenarios. Linux 5.8+ for syscall-level scenarios.
+
+---
+
+## Your agent's error handling has never run
+
+Your agent chains LLM calls, tool subprocesses, RAG lookups, HTTP requests. One flaky link anywhere in that chain silently corrupts the entire reasoning loop — and you find out in production.
+
+The retry logic for a `429` from OpenAI mid-chain. The cleanup when a tool subprocess gets `SIGPIPE`'d. The fallback when your vector DB returns shuffled results. **You wrote that code. You've never seen it run.**
+
+faultkit deterministically triggers the failures your agents hit in production, so you can fix them before your users do.
+
+---
+
+## 60-second demo
+
+The failure mode: your agent retries an OpenAI call after a `429`, but the retry uses partial reasoning state and produces a confidently wrong answer. You won't catch this in a unit test. You'll catch it in faultkit.
+
+```bash
+# Install (macOS / Linux)
+curl -sSL https://faultkit.dev/install | sh
+
+# Run your tests with 20% of OpenAI calls returning 429
+faultkit run --scenario llm-api-degraded -- pytest tests/agent/
+```
+
+That's it. No mocks. No fixtures. Your agent code calls `api.openai.com` exactly the way it does in production — and faultkit returns a real HTTP 429 with a real `Retry-After` header, indistinguishable from the real thing.
+
+```text
+=== faultkit summary ===
+scenario:    llm-api-degraded
+target:      pytest tests/agent/
+duration:    14.2s
+faults fired: 7 (target: ~20% of 34 requests to api.openai.com)
+target exit:  1 (FAIL)
+
+  tests/agent/test_planning.py::test_recovers_from_rate_limit  FAILED
+  tests/agent/test_research.py::test_handles_partial_context   FAILED
+
+run with --verbose to see the injected responses
+```
+
+Two failing tests you didn't have yesterday. Two production bugs you won't have tomorrow.
+
+---
+
+## Scenarios
+
+faultkit ships scenarios mapped to real production failure modes. Each one targets a layer in the agent stack where errors actually originate.
+
+### LLM and gateway
+
+| Scenario | What it does | v0.1 |
+|---|---|:---:|
+| `llm-api-degraded` | Inject 429 / 503 / timeout into requests to OpenAI, Anthropic, Bedrock, Vertex, etc. | ✅ |
+| `llm-streaming-cutoff` | Drop the SSE connection mid-stream after N tokens | 🛣️ |
+| `context-window-squeeze` | Silently truncate large prompts at the SDK boundary | 🛣️ |
+| `gateway-timeout` | LiteLLM / Portkey / custom gateway returns slow or hangs | 🛣️ |
+
+### RAG and vector DB
+
+| Scenario | What it does | v0.1 |
+|---|---|:---:|
+| `rag-corruption` | Pinecone / Weaviate / Qdrant returns stale or shuffled results | 🛣️ |
+| `embeddings-degraded` | Embeddings endpoint returns 5xx intermittently | 🛣️ |
+
+### Tool calls and subprocesses
+
+| Scenario | What it does | v0.1 |
+|---|---|:---:|
+| `tool-call-flaky` | Subprocess gets `SIGPIPE`, OOM-killed, or returns truncated stdout | 🛣️ |
+| `tool-permission-denied` | `EACCES` / `EPERM` on the agent's file or path access | 🛣️ |
+| `tool-slow` | Subprocess hangs for N seconds, exposes timeout-handling bugs | 🛣️ |
+
+### Backend classics
+
+| Scenario | What it does | v0.1 |
+|---|---|:---:|
+| `flaky-network` | Probabilistic `ECONNRESET` and latency spikes (Linux, syscall-level) | ✅ |
+| `disk-full` | `ENOSPC` on write after N bytes | 🛣️ |
+| `slow-dns` | 500–5000ms delay on resolution, intermittent `EAI_AGAIN` | 🛣️ |
+| `fd-exhaustion` | `EMFILE` after N open descriptors | 🛣️ |
+
+✅ = working in v0.1 today · 🛣️ = on the v0.2 / v0.3 roadmap
+
+All scenarios are free and open source. Forever.
+
+---
+
+## Why this exists when other chaos tools exist
+
+| Tool | Setup | AI-agent scenarios | TLS-encrypted traffic | Cost |
+|---|---|---|---|---|
+| **faultkit** | one binary | first-class | yes | free |
+| Chaos Mesh | Kubernetes + CRDs + platform team | none | no | free |
+| Gremlin | enterprise contract | none | platform-level | $50k+/yr |
+| Toxiproxy | one binary | none (TCP-level only) | proxy-only | free |
+| App-layer mocks | code change | DIY per project | n/a | tests the mock |
+
+The chaos tools that exist are built for the *previous* era — Kubernetes-native infra, TCP-level proxies, enterprise procurement. None were designed when "the most fragile code most teams ship" meant a chain of LLM calls and tool subprocesses.
+
+faultkit is built for that.
+
+---
+
+## How it works
+
+You don't need to know this to use faultkit. But if you're going to run it in your CI, you'll want to.
+
+faultkit picks the right injection mechanism for each scenario automatically. Three are supported:
+
+**HTTPS proxy.** For LLM / RAG / gateway scenarios. faultkit runs an in-process MITM proxy, terminates TLS with a CA it provisions for the target process only, and rewrites HTTP responses (status codes, bodies, streaming). The target sees a real HTTP 429 from a real TLS connection, because that's what it gets. Cross-platform, no privileges required.
+
+**eBPF, Linux 5.8+.** For syscall-level scenarios — backend chaos, tool-call subprocess failures, file permission denials. faultkit loads small eBPF programs into the kernel that hook the relevant tracepoints (`recvmsg`, `openat`, `write`, etc.) and use `bpf_override_return` to rewrite syscall return values for processes inside the target's PID tree. The target sees a real `ECONNRESET`, a real `EACCES`, a real short `read()`, because that's what the kernel returned.
+
+**LD_PRELOAD shim, v0.2.** For the gap in between — dynamically linked targets where you want syscall-level fidelity without root, or you're on macOS (where `DYLD_INSERT_LIBRARIES` plays the same role). The shim is a small C library that interposes on libc functions and forwards faults from the runner via shared memory.
+
+Auto-mode is the default. Linux + caps available + scenario fits → eBPF. HTTP scenario → proxy. macOS → proxy and (in v0.2) shim. You can always force a mode with `--mode=ebpf` / `--mode=proxy` / `--mode=shim` if you want.
+
+Why three mechanisms instead of one: the failures your agent hits in production *don't all live at the same layer*. An LLM 429 lives in HTTP semantics on top of TLS. A `SIGPIPE` on a tool subprocess lives at the pipe stdio layer. An `ENOSPC` lives at the filesystem syscall layer. A single-mechanism tool can fake the others, but the faked version exercises different code paths than the real one. faultkit gives you the real one.
+
+---
+
+## Authoring scenarios
+
+Write a YAML file. faultkit handles the rest.
+
+```yaml
+# nightmare.yaml
+target: ai-orchestrator
+
+experiments:
+  - name: "OpenAI rate-limited mid-reasoning"
+    fault:
+      http_status: 429
+      response_headers:
+        Retry-After: "30"
+    match:
+      host: api.openai.com
+    probability: 0.2
+
+  - name: "Postgres connection drops under load"
+    fault:
+      errno: ECONNRESET
+    match:
+      syscall: recvmsg
+      port: 5432
+    probability: 0.05
+
+  - name: "Disk fills up halfway through the run"
+    fault:
+      errno: ENOSPC
+    match:
+      syscall: write
+      after_bytes: 100_000_000
+```
+
+Run it:
+
+```bash
+faultkit run --config nightmare.yaml -- go test ./...
+```
+
+Schema reference: [docs.faultkit.dev/scenarios](https://faultkit.dev/docs/scenarios).
+
+---
+
+## Install
+
+**Quick install**
+
+```bash
+# macOS, Linux
+curl -sSL https://faultkit.dev/install | sh
+```
+
+**From a release**
+
+```bash
+# Linux amd64
+wget https://github.com/faultkit-dev/faultkit/releases/latest/download/faultkit-linux-amd64
+chmod +x faultkit-linux-amd64 && sudo mv faultkit-linux-amd64 /usr/local/bin/faultkit
+
+# macOS arm64 (Apple Silicon)
+wget https://github.com/faultkit-dev/faultkit/releases/latest/download/faultkit-darwin-arm64
+chmod +x faultkit-darwin-arm64 && sudo mv faultkit-darwin-arm64 /usr/local/bin/faultkit
+```
+
+**Package managers**
+
+```bash
+yay -S faultkit              # Arch (AUR)
+nix-env -iA nixpkgs.faultkit # Nix
+go install github.com/faultkit-dev/faultkit/cmd/faultkit@latest
+```
+
+**Requirements**
+
+- Proxy-mode scenarios: any platform with a working Go runtime. No privileges.
+- eBPF-mode scenarios: Linux 5.8+ with BTF enabled, `CAP_BPF` + `CAP_NET_ADMIN` (or root).
+
+Run `faultkit doctor` after install — it tells you which modes are available on your machine and why.
+
+---
+
+## CI integration
+
+Drop it into your test command. Distinct exit codes let CI branch on the outcome:
+
+| Code | Meaning |
+|---|---|
+| `0` | Target passed under fault |
+| `1` | Target failed (the fault found a bug — usually what you want to see in CI) |
+| `2` | Internal faultkit error |
+| `3` | Fault never fired (your test didn't exercise the code path) |
+| `4` | Usage error |
+
+GitHub Actions example:
+
+```yaml
+- name: Resilience tests
+  run: faultkit run --scenario llm-api-degraded -- pytest tests/agent/
+```
+
+More CI recipes: [examples/](./examples/).
+
+---
+
+## Roadmap
+
+**Shipped (v0.1)**
+
+- HTTPS proxy injector with `llm-api-degraded`
+- eBPF injector with `flaky-network`
+- YAML scenario loading
+- Auto-mode selection, `faultkit doctor`, distinct exit codes
+- GitHub Actions integration
+
+**Next (v0.2)**
+
+- LD_PRELOAD / DYLD shim mode
+- Tool-call scenarios (`tool-call-flaky`, `tool-permission-denied`)
+- Streaming-aware proxy (`llm-streaming-cutoff`, `rag-corruption`)
+- More backend scenarios (`disk-full`, `slow-dns`, `fd-exhaustion`)
+
+**Later (v0.3+)**
+
+- Coverage reporting — which syscalls / endpoints did your service actually hit?
+- Scenario packs for specific stacks (LangChain, LlamaIndex, AWS SDK)
+- Observability correlation (Datadog, Sentry, Grafana, Honeycomb)
+- Exploratory: uprobe-based TLS interception for environments where a proxy isn't viable
+
+---
+
+## faultkit Pro
+
+The OSS core is free for individuals and open-source projects, forever. **Pro** is for teams standardizing resilience testing across an organization. It's not built yet — features ship after the v0.1 community proves the wedge. The likely shape:
+
+- Scenario packs for specific stacks and agent frameworks
+- Regression tracking across CI builds
+- Blast-radius controls for staging / production
+- Observability correlation
+- Team dashboards
+- Compliance evidence (SOC 2 CC7.2, ISO 27001 A.17, DORA Article 25)
+
+Interested? [Get on the list →](https://faultkit.dev/pro)
+
+---
+
+## Contributing
+
+Contributions welcome. The project uses an Apache-style individual CLA — the bot will walk you through it on your first PR (~30 seconds, one-time).
+
+- Write a scenario → [scenarios guide](https://faultkit.dev/docs/scenarios)
+- Report a bug → [open an issue](https://github.com/faultkit-dev/faultkit/issues/new)
+- Ask a question → [Discussions](https://github.com/faultkit-dev/faultkit/discussions)
+
+Good first issues are tagged on the [issue tracker](https://github.com/faultkit-dev/faultkit/issues?q=label%3A%22good+first+issue%22).
+
+---
+
+## Built by the author of [kntrl.dev](https://kntrl.dev)
+
+Production eBPF tooling, shipped for years. faultkit is built on the same foundations that power kntrl's CI/CD runtime security agent.
+
+---
+
+## License
+
+Apache 2.0. Free for individuals, teams, and open-source projects, always.
+
+---
+
+<div align="center">
+
+### Stop guessing if your agent is resilient.
+
+### Run the dark code.
+
+**[faultkit.dev](https://faultkit.dev)**
+
+</div>
