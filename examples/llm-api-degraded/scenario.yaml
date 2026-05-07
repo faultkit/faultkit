@@ -1,0 +1,12 @@
+name: llm-api-degraded-local
+description: llm-api-degraded scenario adapted for the local mock server.
+experiments:
+  - name: openai-rate-limited
+    fault:
+      http_status: 429
+      response_headers:
+        Retry-After: "30"
+    match:
+      host: 127.0.0.1*
+      path: /v1/*
+    probability: 1.0
