@@ -13,8 +13,8 @@
 
 </div>
 
-> **Status:** v0.1 — two scenarios end-to-end. See [roadmap](#roadmap) for what ships next.
-> **Platforms:** macOS, Linux, Windows for HTTP scenarios. Linux 5.8+ for syscall-level scenarios.
+> **Status:** v0.1 — five scenarios end-to-end. See [roadmap](#roadmap) for what ships next.
+> **Platforms:** macOS and Linux for HTTP scenarios. Linux 5.8+ for syscall-level scenarios.
 
 ---
 
@@ -69,7 +69,8 @@ faultkit ships scenarios mapped to real production failure modes. Each one targe
 | Scenario | What it does | v0.1 |
 |---|---|:---:|
 | `llm-api-degraded` | Inject 429 / 503 / timeout into requests to OpenAI, Anthropic, Bedrock, Vertex, etc. | ✅ |
-| `llm-streaming-cutoff` | Drop the SSE connection mid-stream after N tokens | 🛣️ |
+| `malformed-json-response` | LLM returns 200 OK with syntactically invalid JSON in the body | ✅ |
+| `llm-streaming-cutoff` | Drop the SSE connection mid-stream after N tokens | ✅ |
 | `context-window-squeeze` | Silently truncate large prompts at the SDK boundary | 🛣️ |
 | `gateway-timeout` | LiteLLM / Portkey / custom gateway returns slow or hangs | 🛣️ |
 
@@ -84,8 +85,8 @@ faultkit ships scenarios mapped to real production failure modes. Each one targe
 
 | Scenario | What it does | v0.1 |
 |---|---|:---:|
+| `tool-permission-denied` | `EACCES` / `EPERM` on the agent's file or path access | ✅ |
 | `tool-call-flaky` | Subprocess gets `SIGPIPE`, OOM-killed, or returns truncated stdout | 🛣️ |
-| `tool-permission-denied` | `EACCES` / `EPERM` on the agent's file or path access | 🛣️ |
 | `tool-slow` | Subprocess hangs for N seconds, exposes timeout-handling bugs | 🛣️ |
 
 ### Backend classics
@@ -100,22 +101,6 @@ faultkit ships scenarios mapped to real production failure modes. Each one targe
 ✅ = working in v0.1 today · 🛣️ = on the v0.2 / v0.3 roadmap
 
 All scenarios are free and open source. Forever.
-
----
-
-## Why this exists when other chaos tools exist
-
-| Tool | Setup | AI-agent scenarios | TLS-encrypted traffic | Cost |
-|---|---|---|---|---|
-| **faultkit** | one binary | first-class | yes | free |
-| Chaos Mesh | Kubernetes + CRDs + platform team | none | no | free |
-| Gremlin | enterprise contract | none | platform-level | $50k+/yr |
-| Toxiproxy | one binary | none (TCP-level only) | proxy-only | free |
-| App-layer mocks | code change | DIY per project | n/a | tests the mock |
-
-The chaos tools that exist are built for the *previous* era — Kubernetes-native infra, TCP-level proxies, enterprise procurement. None were designed when "the most fragile code most teams ship" meant a chain of LLM calls and tool subprocesses.
-
-faultkit is built for that.
 
 ---
 
@@ -143,7 +128,8 @@ Write a YAML file. faultkit handles the rest.
 
 ```yaml
 # nightmare.yaml
-target: ai-orchestrator
+name: nightmare
+description: Multiple failures happening simultaneously.
 
 experiments:
   - name: "OpenAI rate-limited mid-reasoning"
@@ -155,20 +141,19 @@ experiments:
       host: api.openai.com
     probability: 0.2
 
-  - name: "Postgres connection drops under load"
+  - name: "Network drops on backend recv"
     fault:
       errno: ECONNRESET
     match:
       syscall: recvmsg
-      port: 5432
     probability: 0.05
 
-  - name: "Disk fills up halfway through the run"
+  - name: "Tool can't read its config"
     fault:
-      errno: ENOSPC
+      errno: EACCES
     match:
-      syscall: write
-      after_bytes: 100_000_000
+      syscall: openat
+    probability: 0.05
 ```
 
 Run it:
@@ -246,8 +231,8 @@ More CI recipes: [examples/](./examples/).
 
 **Shipped (v0.1)**
 
-- HTTPS proxy injector with `llm-api-degraded`
-- eBPF injector with `flaky-network`
+- HTTPS proxy injector with `llm-api-degraded`, `malformed-json-response`, `llm-streaming-cutoff`
+- eBPF injector with `flaky-network`, `tool-permission-denied`
 - YAML scenario loading
 - Auto-mode selection, `faultkit doctor`, distinct exit codes
 - GitHub Actions integration
@@ -255,8 +240,8 @@ More CI recipes: [examples/](./examples/).
 **Next (v0.2)**
 
 - LD_PRELOAD / DYLD shim mode
-- Tool-call scenarios (`tool-call-flaky`, `tool-permission-denied`)
-- Streaming-aware proxy (`llm-streaming-cutoff`, `rag-corruption`)
+- More tool-call scenarios (`tool-call-flaky`, `tool-slow`)
+- RAG / embeddings scenarios (`rag-corruption`, `embeddings-degraded`)
 - More backend scenarios (`disk-full`, `slow-dns`, `fd-exhaustion`)
 
 **Later (v0.3+)**
@@ -292,12 +277,6 @@ Contributions welcome. The project uses an Apache-style individual CLA — the b
 - Ask a question → [Discussions](https://github.com/faultkit-dev/faultkit/discussions)
 
 Good first issues are tagged on the [issue tracker](https://github.com/faultkit-dev/faultkit/issues?q=label%3A%22good+first+issue%22).
-
----
-
-## Built by the author of [kntrl.dev](https://kntrl.dev)
-
-Production eBPF tooling, shipped for years. faultkit is built on the same foundations that power kntrl's CI/CD runtime security agent.
 
 ---
 
