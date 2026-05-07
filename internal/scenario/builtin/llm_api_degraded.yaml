@@ -1,0 +1,12 @@
+name: llm-api-degraded
+description: Inject 429/503/timeout into requests to LLM provider APIs.
+experiments:
+  - name: openai-rate-limited
+    fault:
+      http_status: 429
+      response_headers:
+        Retry-After: "30"
+    match:
+      host: api.openai.com
+      path: /v1/*
+    probability: 0.2
