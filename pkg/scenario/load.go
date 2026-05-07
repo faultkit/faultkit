@@ -10,7 +10,7 @@ import (
 
 // Load reads and validates a scenario from a YAML file at path.
 func Load(path string) (*Scenario, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- the contract is "load this file"; path is caller-provided by design.
 	if err != nil {
 		return nil, fmt.Errorf("loading scenario %s: %w", path, err)
 	}

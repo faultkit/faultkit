@@ -9,7 +9,7 @@ LDFLAGS := -X $(CLI_PKG).version=$(VERSION) \
            -X $(CLI_PKG).commit=$(COMMIT) \
            -X $(CLI_PKG).date=$(DATE)
 
-.PHONY: build test lint bpf clean
+.PHONY: build test lint sec bpf clean
 
 build:
 	go build -ldflags '$(LDFLAGS)' -o bin/faultkit ./cmd/faultkit
@@ -30,6 +30,20 @@ lint:
 		echo "  go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest"; \
 		exit 1; \
 	fi
+
+sec:
+	@if ! command -v gosec >/dev/null 2>&1; then \
+		echo "gosec not installed; install with:"; \
+		echo "  go install github.com/securego/gosec/v2/cmd/gosec@latest"; \
+		exit 1; \
+	fi
+	@if ! command -v nilaway >/dev/null 2>&1; then \
+		echo "nilaway not installed; install with:"; \
+		echo "  go install go.uber.org/nilaway/cmd/nilaway@latest"; \
+		exit 1; \
+	fi
+	gosec ./...
+	nilaway -include-pkgs=github.com/faultkit-dev/faultkit ./...
 
 bpf:
 	@echo "bpf build not yet implemented"
