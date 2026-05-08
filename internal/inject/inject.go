@@ -45,3 +45,12 @@ type Injector interface {
 	Stop(ctx context.Context) error
 	Events() <-chan Event
 }
+
+// PIDAware is implemented by injectors that need the target's PID
+// after the runner forks (eBPF mode populates a per-PID fault config
+// map). The CLI's runner calls SetTargetPID once between cmd.Start and
+// cmd.Wait. Injectors that don't care about PID (proxy mode) simply
+// don't implement this interface.
+type PIDAware interface {
+	SetTargetPID(pid int) error
+}
