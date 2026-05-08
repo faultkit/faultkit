@@ -197,8 +197,43 @@ go install github.com/faultkit-dev/faultkit/cmd/faultkit@latest
 
 **Requirements**
 
-- Proxy-mode scenarios: any platform with a working Go runtime. No privileges.
-- eBPF-mode scenarios: Linux 5.8+ with BTF enabled, `CAP_BPF` + `CAP_NET_ADMIN` (or root).
+- **Proxy-mode scenarios**: any platform with a working Go runtime. No privileges.
+- **eBPF-mode scenarios**: Linux 5.8+ with BTF enabled. The simplest path is
+  `sudo`:
+
+  ```
+  sudo faultkit run --scenario flaky-network -- ./your-target
+  ```
+
+  The file-capabilities path also works and avoids running the target
+  as root, but it requires one extra capability for cilium/ebpf to
+  detect the kernel version:
+
+  ```
+  sudo setcap 'cap_bpf,cap_net_admin,cap_perfmon,cap_sys_ptrace=+ep' /usr/local/bin/faultkit
+  ```
+
+  - `cap_bpf` + `cap_net_admin` — load BPF programs and attach the kprobe.
+  - `cap_perfmon` — kernel requires it for tracing-class BPF programs (kprobes, tracepoints).
+  - `cap_sys_ptrace` — see the dumpable note below.
+
+  When running under file caps, faultkit calls `prctl(PR_SET_DUMPABLE, 1)`
+  on Linux so cilium/ebpf can read `/proc/self/mem`. The trade-off is
+  that other processes running as your user can ptrace-attach to
+  faultkit while it's running. faultkit is a developer tool — that's
+  acceptable on a developer machine or single-tenant CI runner. If
+  it's not acceptable in your environment, use `sudo` instead.
+
+**Process-tree propagation works through wrappers.** faultkit registers
+the PID it forks; descendants inherit the registration automatically,
+so `sh -c '... curl ...'` and similar wrappers fire faults on the
+inner process the same as a direct invocation.
+
+**Heads-up on Go targets**: Go's `net/http` reads via `read()` rather
+than `recvmsg()`/`recvfrom()`. faultkit's kprobes only cover the
+latter two — `curl`, `python-requests`, `libcurl`-based tools, `nc`
+all work; a Go HTTP target won't get faulted by `flaky-network`. Use
+the proxy scenarios for Go targets.
 
 Run `faultkit check` after install — it tells you which modes are available on your machine and why.
 
