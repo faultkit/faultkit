@@ -18,10 +18,13 @@ func TestFaultValidate(t *testing.T) {
 		{name: "http body only", fault: faulttypes.Fault{ResponseBody: "boom"}},
 		{name: "http headers only", fault: faulttypes.Fault{ResponseHeaders: map[string]string{"X": "Y"}}},
 		{name: "syscall only", fault: faulttypes.Fault{Errno: "ECONNRESET"}},
+		{name: "stream cutoff only", fault: faulttypes.Fault{StreamCutoffTokens: 80}},
 		{name: "mixed", fault: faulttypes.Fault{HTTPStatus: 429, Errno: "ECONNRESET"}, wantSentinel: faulttypes.ErrFaultMixed},
+		{name: "stream cutoff mixed with errno", fault: faulttypes.Fault{StreamCutoffTokens: 80, Errno: "EIO"}, wantSentinel: faulttypes.ErrFaultMixed},
 		{name: "empty", fault: faulttypes.Fault{}, wantSentinel: faulttypes.ErrFaultEmpty},
 		{name: "status too low", fault: faulttypes.Fault{HTTPStatus: 99}, wantAnyErr: true},
 		{name: "status too high", fault: faulttypes.Fault{HTTPStatus: 600}, wantAnyErr: true},
+		{name: "negative stream cutoff", fault: faulttypes.Fault{StreamCutoffTokens: -1}, wantAnyErr: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -53,6 +56,7 @@ func TestFaultIsHTTPIsSyscall(t *testing.T) {
 		{"empty", faulttypes.Fault{}, false, false},
 		{"status", faulttypes.Fault{HTTPStatus: 200}, true, false},
 		{"errno", faulttypes.Fault{Errno: "EACCES"}, false, true},
+		{"stream cutoff", faulttypes.Fault{StreamCutoffTokens: 5}, true, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

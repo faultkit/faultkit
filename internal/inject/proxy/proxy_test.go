@@ -11,6 +11,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/faultkit-dev/faultkit/internal/inject/proxy"
 	"github.com/faultkit-dev/faultkit/pkg/faulttypes"
@@ -29,10 +30,13 @@ func newTestScenario() *scenario.Scenario {
 	}
 }
 
-func startInjector(t *testing.T) (*proxy.Injector, []string) {
+func startInjector(t *testing.T, s *scenario.Scenario) (*proxy.Injector, []string) {
 	t.Helper()
+	if s == nil {
+		s = newTestScenario()
+	}
 	inj := proxy.New()
-	env, err := inj.Start(context.Background(), newTestScenario())
+	env, err := inj.Start(context.Background(), s)
 	if err != nil {
 		t.Fatalf("Start: %v", err)
 	}
@@ -54,21 +58,8 @@ func envValue(env []string, key string) string {
 	return ""
 }
 
-func TestProxyRoundTrip(t *testing.T) {
-	const wantBody = "hello upstream"
-	upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(wantBody))
-	}))
-	defer upstream.Close()
-
-	inj, env := startInjector(t)
-
-	upstreamCAs := x509.NewCertPool()
-	upstreamCAs.AddCert(upstream.Certificate())
-	inj.Proxy().SetRoundTripper(&http.Transport{
-		TLSClientConfig: &tls.Config{RootCAs: upstreamCAs, MinVersion: tls.VersionTLS12},
-	})
-
+func clientThroughProxy(t *testing.T, env []string) *http.Client {
+	t.Helper()
 	proxyURLStr := envValue(env, "HTTPS_PROXY")
 	caPath := envValue(env, "SSL_CERT_FILE")
 	if proxyURLStr == "" || caPath == "" {
@@ -78,22 +69,39 @@ func TestProxyRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse proxy url: %v", err)
 	}
-
 	caPEM, err := os.ReadFile(caPath)
 	if err != nil {
 		t.Fatalf("read CA: %v", err)
 	}
-	caPool := x509.NewCertPool()
-	if !caPool.AppendCertsFromPEM(caPEM) {
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM(caPEM) {
 		t.Fatalf("CA PEM did not append")
 	}
-
-	client := &http.Client{
+	return &http.Client{
 		Transport: &http.Transport{
 			Proxy:           http.ProxyURL(proxyURL),
-			TLSClientConfig: &tls.Config{RootCAs: caPool, MinVersion: tls.VersionTLS12},
+			TLSClientConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12},
 		},
+		Timeout: 10 * time.Second,
 	}
+}
+
+func TestProxyRoundTrip(t *testing.T) {
+	const wantBody = "hello upstream"
+	upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(wantBody))
+	}))
+	defer upstream.Close()
+
+	inj, env := startInjector(t, nil)
+
+	upstreamCAs := x509.NewCertPool()
+	upstreamCAs.AddCert(upstream.Certificate())
+	inj.Proxy().SetRoundTripper(&http.Transport{
+		TLSClientConfig: &tls.Config{RootCAs: upstreamCAs, MinVersion: tls.VersionTLS12},
+	})
+
+	client := clientThroughProxy(t, env)
 	resp, err := client.Get(upstream.URL)
 	if err != nil {
 		t.Fatalf("client.Get: %v", err)
@@ -106,7 +114,7 @@ func TestProxyRoundTrip(t *testing.T) {
 }
 
 func TestStopRemovesCAFile(t *testing.T) {
-	inj, env := startInjector(t)
+	inj, env := startInjector(t, nil)
 
 	caPath := envValue(env, "SSL_CERT_FILE")
 	if caPath == "" {
@@ -129,7 +137,7 @@ func TestStopRemovesCAFile(t *testing.T) {
 }
 
 func TestStartTwiceFails(t *testing.T) {
-	inj, _ := startInjector(t)
+	inj, _ := startInjector(t, nil)
 	if _, err := inj.Start(context.Background(), newTestScenario()); err == nil {
 		t.Error("second Start should error")
 	}

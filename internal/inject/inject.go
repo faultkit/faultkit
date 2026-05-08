@@ -35,8 +35,11 @@ type Event struct {
 // merge into the target's environment so the target's traffic reaches
 // the injector. Empty slice is allowed (eBPF mode needs no env vars).
 //
-// The Events channel must remain open while the Injector is running
-// and is closed by Stop.
+// Events returns a buffered channel of fault-decision events. The
+// channel stays open while the Injector runs; Stop closes it.
+// Implementations may drop events when the buffer is full so they
+// never block the request hot path — consumers should drain
+// continuously.
 type Injector interface {
 	Start(ctx context.Context, s *scenario.Scenario) ([]string, error)
 	Stop(ctx context.Context) error
