@@ -82,3 +82,74 @@ func TestScenarioShowExtraArgsExitsUsage(t *testing.T) {
 		t.Fatalf("code=%d, want %d", code, cli.ExitUsage)
 	}
 }
+
+func TestRunRequiresScenarioOrConfig(t *testing.T) {
+	code, _, stderr := runCLI(t, "run", "--", "true")
+	if code != cli.ExitUsage {
+		t.Fatalf("code=%d, want %d (stderr=%q)", code, cli.ExitUsage, stderr)
+	}
+	if !strings.Contains(stderr, "scenario") && !strings.Contains(stderr, "config") {
+		t.Errorf("stderr should mention --scenario or --config: %q", stderr)
+	}
+}
+
+func TestRunMutuallyExclusiveSources(t *testing.T) {
+	code, _, _ := runCLI(t, "run",
+		"--scenario", "llm-api-degraded",
+		"--config", "/tmp/whatever.yaml",
+		"--", "true",
+	)
+	if code != cli.ExitUsage {
+		t.Fatalf("code=%d, want %d", code, cli.ExitUsage)
+	}
+}
+
+func TestRunUnknownScenarioExitsUsage(t *testing.T) {
+	code, _, _ := runCLI(t, "run", "--scenario", "does-not-exist", "--", "true")
+	if code != cli.ExitUsage {
+		t.Fatalf("code=%d, want %d", code, cli.ExitUsage)
+	}
+}
+
+func TestRunMissingTargetExitsUsage(t *testing.T) {
+	code, _, _ := runCLI(t, "run", "--scenario", "llm-api-degraded")
+	if code != cli.ExitUsage {
+		t.Fatalf("code=%d, want %d", code, cli.ExitUsage)
+	}
+}
+
+func TestRunTargetSucceedsNoFaultFires(t *testing.T) {
+	code, _, _ := runCLI(t, "run", "--scenario", "llm-api-degraded", "--", "true")
+	if code != cli.ExitFaultNotFired {
+		t.Fatalf("code=%d, want %d", code, cli.ExitFaultNotFired)
+	}
+}
+
+func TestRunTargetFailsExitsTargetFailed(t *testing.T) {
+	code, _, _ := runCLI(t, "run", "--scenario", "llm-api-degraded", "--", "false")
+	if code != cli.ExitTargetFailed {
+		t.Fatalf("code=%d, want %d", code, cli.ExitTargetFailed)
+	}
+}
+
+func TestRunModeEBPFNotImplemented(t *testing.T) {
+	code, _, stderr := runCLI(t, "run",
+		"--scenario", "llm-api-degraded",
+		"--mode", "ebpf",
+		"--", "true",
+	)
+	if code != cli.ExitInternalError {
+		t.Fatalf("code=%d, want %d (stderr=%q)", code, cli.ExitInternalError, stderr)
+	}
+}
+
+func TestRunModeProxyOnSyscallScenarioRejected(t *testing.T) {
+	code, _, stderr := runCLI(t, "run",
+		"--scenario", "flaky-network",
+		"--mode", "proxy",
+		"--", "true",
+	)
+	if code != cli.ExitUsage {
+		t.Fatalf("code=%d, want %d (stderr=%q)", code, cli.ExitUsage, stderr)
+	}
+}

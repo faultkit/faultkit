@@ -17,15 +17,15 @@ import (
 // proxy mode, a syscall in eBPF mode). Fired distinguishes "the fault
 // actually applied" from "we matched but the dice roll didn't fire".
 type Event struct {
-	Experiment string
-	Fault      faulttypes.Fault
-	Fired      bool
-	Host       string
-	Path       string
-	Syscall    string
-	PID        int
-	Timestamp  time.Time
-	Err        string
+	Experiment string           `json:"experiment"`
+	Fault      faulttypes.Fault `json:"fault"`
+	Fired      bool             `json:"fired"`
+	Host       string           `json:"host,omitempty"`
+	Path       string           `json:"path,omitempty"`
+	Syscall    string           `json:"syscall,omitempty"`
+	PID        int              `json:"pid,omitempty"`
+	Timestamp  time.Time        `json:"timestamp"`
+	Err        string           `json:"err,omitempty"`
 }
 
 // Injector starts a fault-injection mechanism, runs until Stop is
