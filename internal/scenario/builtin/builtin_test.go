@@ -10,7 +10,13 @@ import (
 
 func TestBuiltinsLoadable(t *testing.T) {
 	got := scenario.BuiltinNames()
-	for _, want := range []string{"flaky-network", "llm-api-degraded"} {
+	for _, want := range []string{
+		"flaky-network",
+		"llm-api-degraded",
+		"llm-streaming-cutoff",
+		"malformed-json-response",
+		"tool-permission-denied",
+	} {
 		if !slices.Contains(got, want) {
 			t.Errorf("BuiltinNames missing %q (got %v)", want, got)
 			continue

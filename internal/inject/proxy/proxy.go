@@ -39,11 +39,11 @@ func New() *Injector {
 	return &Injector{events: make(chan inject.Event, eventBuffer)}
 }
 
-// Start generates a per-run CA, starts the proxy on 127.0.0.1:0, and
-// returns the env vars the runner must merge into the target's
-// environment so its HTTP/HTTPS traffic flows through the proxy and
-// trusts our CA.
-func (i *Injector) Start(_ context.Context, _ *scenario.Scenario) ([]string, error) {
+// Start generates a per-run CA, starts the proxy on 127.0.0.1:0,
+// installs the fault matcher and faulter on it, and returns the env
+// vars the runner must merge into the target's environment so its
+// HTTP/HTTPS traffic flows through the proxy and trusts our CA.
+func (i *Injector) Start(_ context.Context, s *scenario.Scenario) ([]string, error) {
 	if i.server != nil {
 		return nil, errors.New("proxy: already started")
 	}
@@ -64,6 +64,11 @@ func (i *Injector) Start(_ context.Context, _ *scenario.Scenario) ([]string, err
 		_ = ca.Cleanup()
 		return nil, err
 	}
+
+	faulter := NewFaulter(s, i.events, nil)
+	server.Proxy().SetRequestModifier(faulter)
+	server.Proxy().SetResponseModifier(faulter)
+
 	addr, err := server.Listen()
 	if err != nil {
 		_ = ca.Cleanup()
