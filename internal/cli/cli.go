@@ -59,6 +59,13 @@ type usageError struct{ err error }
 func (u *usageError) Error() string { return u.err.Error() }
 func (u *usageError) Unwrap() error { return u.err }
 
+// UsageErrorf wraps a formatted error so the CLI dispatch maps it to
+// ExitUsage. Use for invalid flag combinations and unknown
+// scenarios/files surfaced to the user as their own input mistake.
+func UsageErrorf(format string, args ...any) error {
+	return &usageError{fmt.Errorf(format, args...)}
+}
+
 func isUsageError(err error) bool {
 	var u *usageError
 	if errors.As(err, &u) {
