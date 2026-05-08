@@ -27,11 +27,13 @@ const prSetDumpable = 4
 // only synthesizes user-facing events from a counter.
 const faultPollInterval = 50 * time.Millisecond
 
-// flakyNetworkSyscall is the value reported in fired-fault events for
-// the flaky-network scenario. The BPF program hooks both recvmsg and
-// recvfrom; we report the scenario's nominal syscall (per the YAML)
-// rather than guessing which kprobe actually fired.
-const flakyNetworkSyscall = "recvmsg"
+// Scenario gate values. The BPF program hooks both recvmsg and
+// recvfrom; flakyNetworkSyscall is the nominal syscall reported in
+// events (per the YAML), not a guess at which kprobe fired.
+const (
+	flakyNetworkSyscall = "recvmsg"
+	flakyNetworkErrno   = "ECONNRESET"
+)
 
 // Injector implements inject.Injector for syscall-level fault injection.
 type Injector struct {
@@ -54,8 +56,7 @@ func New() *Injector {
 	return &Injector{events: make(chan inject.Event, 256)}
 }
 
-// Start loads the BPF program and attaches the kprobe. Returns an
-// empty env slice — eBPF mode needs no env vars on the target.
+// Start loads the BPF program and attaches the four kprobes.
 func (i *Injector) Start(_ context.Context, s *scenario.Scenario) ([]string, error) {
 	if i.objs != nil {
 		return nil, errors.New("ebpf: already started")
@@ -64,7 +65,7 @@ func (i *Injector) Start(_ context.Context, s *scenario.Scenario) ([]string, err
 	if err != nil {
 		return nil, err
 	}
-	if exp.Match.Syscall != "recvmsg" || exp.Fault.Errno != "ECONNRESET" {
+	if exp.Match.Syscall != flakyNetworkSyscall || exp.Fault.Errno != flakyNetworkErrno {
 		return nil, fmt.Errorf("ebpf: no eBPF program for syscall=%q errno=%q", exp.Match.Syscall, exp.Fault.Errno)
 	}
 
@@ -157,6 +158,10 @@ func (i *Injector) pollFaultCount() {
 		case <-t.C:
 			var cur uint64
 			if err := i.objs.FaultCount.Lookup(&zero, &cur); err != nil {
+				continue
+			}
+			if cur < prev {
+				prev = cur
 				continue
 			}
 			delta := cur - prev

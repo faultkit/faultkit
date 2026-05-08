@@ -231,9 +231,9 @@ inner process the same as a direct invocation.
 
 **Heads-up on Go targets**: Go's `net/http` reads via `read()` rather
 than `recvmsg()`/`recvfrom()`. faultkit's kprobes only cover the
-latter two — `curl`, `python-requests`, `libcurl`-based tools, `nc`
-all work; a Go HTTP target won't get faulted by `flaky-network`. Use
-the proxy scenarios for Go targets.
+latter two, so libc-based clients (most C/Python/Node tooling) get
+faulted but Go HTTP targets don't. Use the proxy scenarios for Go
+targets.
 
 Run `faultkit check` after install — it tells you which modes are available on your machine and why.
 
