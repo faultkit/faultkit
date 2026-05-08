@@ -132,14 +132,14 @@ func TestRunTargetFailsExitsTargetFailed(t *testing.T) {
 	}
 }
 
-func TestRunModeEBPFRejected(t *testing.T) {
+func TestRunModeEBPFOnHTTPScenarioRejected(t *testing.T) {
 	code, _, stderr := runCLI(t, "run",
 		"--scenario", "llm-api-degraded",
 		"--mode", "ebpf",
 		"--", "true",
 	)
-	if code != cli.ExitInternalError {
-		t.Fatalf("code=%d, want %d (stderr=%q)", code, cli.ExitInternalError, stderr)
+	if code != cli.ExitUsage {
+		t.Fatalf("code=%d, want %d (stderr=%q)", code, cli.ExitUsage, stderr)
 	}
 }
 

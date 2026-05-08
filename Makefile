@@ -45,8 +45,11 @@ sec:
 	gosec ./...
 	nilaway -include-pkgs=github.com/faultkit-dev/faultkit ./...
 
-bpf:
-	@echo "bpf build not yet implemented"
+bpf: bpf/vmlinux.h
+	go generate ./internal/inject/ebpf/...
+
+bpf/vmlinux.h:
+	bpftool btf dump file /sys/kernel/btf/vmlinux format c > $@
 
 clean:
 	rm -rf bin/ dist/

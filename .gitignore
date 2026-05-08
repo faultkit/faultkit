@@ -14,9 +14,12 @@ coverage.html
 
 # eBPF build artifacts
 # Note: bpf2go-generated .go files ARE committed (per V0.1_SPEC.md §3.1)
-# but the intermediate .o objects are not.
+# but the intermediate .o objects are not. vmlinux.h is regenerated
+# by `make bpf` from the local kernel's BTF; keeping it out of the
+# repo avoids committing a 6+MB host-specific file.
 *.bpf.o
 /internal/inject/ebpf/gen/*.o
+/bpf/vmlinux.h
 
 # Test artifacts
 /tmp/

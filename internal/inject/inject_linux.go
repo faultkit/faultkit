@@ -12,6 +12,7 @@ import (
 // Linux capability bit indices, see capabilities(7).
 const (
 	capNetAdmin = 12
+	capPerfmon  = 38
 	capBPF      = 39
 )
 
@@ -30,9 +31,9 @@ func ebpfModeReport() ModeReport {
 		return ModeReport{Mode: ModeEBPF, Available: true, Reason: "via root"}
 	}
 	if hasBPFCaps() {
-		return ModeReport{Mode: ModeEBPF, Available: true, Reason: "via CAP_BPF + CAP_NET_ADMIN"}
+		return ModeReport{Mode: ModeEBPF, Available: true, Reason: "via CAP_BPF + CAP_NET_ADMIN + CAP_PERFMON"}
 	}
-	return ModeReport{Mode: ModeEBPF, Available: false, Reason: "needs CAP_BPF + CAP_NET_ADMIN or root"}
+	return ModeReport{Mode: ModeEBPF, Available: false, Reason: "needs CAP_BPF + CAP_NET_ADMIN + CAP_PERFMON or root"}
 }
 
 func kernelRelease() string {
@@ -86,7 +87,9 @@ func hasBPFCaps() bool {
 		if err != nil {
 			return false
 		}
-		return (mask&(1<<capNetAdmin)) != 0 && (mask&(1<<capBPF)) != 0
+		return (mask&(1<<capNetAdmin)) != 0 &&
+			(mask&(1<<capBPF)) != 0 &&
+			(mask&(1<<capPerfmon)) != 0
 	}
 	return false
 }

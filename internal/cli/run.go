@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -13,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/faultkit-dev/faultkit/internal/inject"
+	"github.com/faultkit-dev/faultkit/internal/inject/ebpf"
 	"github.com/faultkit-dev/faultkit/internal/inject/proxy"
 	"github.com/faultkit-dev/faultkit/internal/report"
 	"github.com/faultkit-dev/faultkit/internal/runner"
@@ -78,7 +78,19 @@ func runFaultkit(parentCtx context.Context, o runOpts) error {
 		return fmt.Errorf("starting injector: %w", err)
 	}
 
-	r := &runner.Runner{Stdout: o.stdout, Stderr: o.stderr}
+	r := &runner.Runner{
+		Stdout: o.stdout,
+		Stderr: o.stderr,
+		OnStarted: func(pid int) {
+			pa, ok := inj.(inject.PIDAware)
+			if !ok {
+				return
+			}
+			if err := pa.SetTargetPID(pid); err != nil {
+				fmt.Fprintf(o.stderr, "warning: injector pid configure: %v\n", err)
+			}
+		},
+	}
 	start := time.Now()
 	result, runErr := r.Run(ctx, o.target, env)
 	duration := time.Since(start)
@@ -141,27 +153,35 @@ func loadScenario(o runOpts) (*scenario.Scenario, error) {
 }
 
 func pickInjector(s *scenario.Scenario, mode string) (inject.Injector, error) {
-	hasHTTP := false
+	hasHTTP, hasSyscall := false, false
 	for _, exp := range s.Experiments {
 		if exp.Match.IsHTTP() {
 			hasHTTP = true
-			break
+		}
+		if exp.Match.IsSyscall() {
+			hasSyscall = true
 		}
 	}
 
 	switch mode {
 	case modeAuto:
-		if hasHTTP {
+		switch {
+		case hasHTTP:
 			return proxy.New(), nil
+		case hasSyscall:
+			return ebpf.New(), nil
 		}
-		return nil, fmt.Errorf("scenario %q has no HTTP experiments and no other injector is available", s.Name)
+		return nil, fmt.Errorf("scenario %q has no experiments any injector can serve", s.Name)
 	case modeProxy:
 		if !hasHTTP {
 			return nil, UsageErrorf("scenario %q has no HTTP experiments; --mode=proxy is incompatible", s.Name)
 		}
 		return proxy.New(), nil
 	case modeEBPF:
-		return nil, errors.New("eBPF injector not available")
+		if !hasSyscall {
+			return nil, UsageErrorf("scenario %q has no syscall experiments; --mode=ebpf is incompatible", s.Name)
+		}
+		return ebpf.New(), nil
 	default:
 		return nil, UsageErrorf("--mode must be %s, %s, or %s; got %q", modeAuto, modeProxy, modeEBPF, mode)
 	}
