@@ -1,5 +1,5 @@
 // Package inject defines the contract every fault-injection mechanism
-// (proxy, eBPF, future shim) implements. The CLI's `run` command picks
+// (proxy, eBPF) implements. The CLI's `run` command picks
 // an Injector based on the scenario and the host's capabilities, then
 // drives it through the lifecycle below.
 package inject

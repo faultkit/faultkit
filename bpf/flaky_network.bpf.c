@@ -1,16 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0
 //
-// flaky_network: inject ECONNRESET on TCP recv for the target PID tree.
-//
-// Two kprobes (sys_recvmsg + sys_recvfrom) cover the syscalls real
-// HTTP clients use; bpf_override_return swaps the return value.
-// Two more kprobes (wake_up_new_task + do_exit) maintain the fault_config
-// map: fork propagates the parent's entry to the child, exit removes
-// the entry so PID reuse can't accidentally fault unrelated processes.
-//
-// Kprobes for fork/exit instead of the obvious sched_process_fork/exit
-// tracepoints because hardened kernels (lockdown LSM in `integrity`
-// mode) block tracepoint attachment via perf_event but allow kprobes.
+// Fork/exit handling uses kprobes (not the obvious sched_process_*
+// tracepoints) because hardened kernels with lockdown=integrity block
+// tracepoint perf-event attach but allow kprobes.
 
 #include "vmlinux.h"
 #include <bpf/bpf_helpers.h>
@@ -52,15 +44,8 @@ int BPF_KPROBE(flaky_network_recvfrom) {
 	return maybe_inject(ctx);
 }
 
-// wake_up_new_task fires when a freshly forked task is ready to run.
-// current is the parent (forker); the first arg is the new task.
-// Reading p->tgid via CO-RE (BPF_CORE_READ) keeps us portable across
-// kernel versions that change struct task_struct's layout.
-//
-// Fires for every fork/clone system-wide; we only act when the parent
-// is in fault_config. Because the previous level's fork already added
-// the parent, descendants get tracked at every level — full process
-// tree, no recursion in BPF, no depth limit.
+// CO-RE keeps p->tgid portable across kernel versions where
+// task_struct's layout differs.
 SEC("kprobe/wake_up_new_task")
 int BPF_KPROBE(flaky_network_track_fork, struct task_struct *p) {
 	if (!p) {
