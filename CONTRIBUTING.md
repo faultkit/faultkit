@@ -44,7 +44,7 @@ go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 [Open an issue](https://github.com/faultkit-dev/faultkit/issues/new)
 with: faultkit version (`faultkit version`), platform + kernel
 (`uname -a`), exact command run, expected vs. observed behavior.
-The output of `faultkit doctor` helps a lot.
+The output of `faultkit check` helps a lot.
 
 ## Asking questions
 
