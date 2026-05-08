@@ -18,6 +18,11 @@ type Runner struct {
 	Stdout io.Writer
 	Stderr io.Writer
 	Stdin  io.Reader
+
+	// OnStarted, if non-nil, is called once after the target has been
+	// forked and its PID is known, before Wait — for consumers that
+	// need the post-fork PID.
+	OnStarted func(pid int)
 }
 
 const waitDelay = 5 * time.Second
@@ -67,6 +72,9 @@ func (r *Runner) Run(ctx context.Context, target []string, env []string) (*Resul
 	start := time.Now()
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("runner: start %s: %w", target[0], err)
+	}
+	if r.OnStarted != nil && cmd.Process != nil {
+		r.OnStarted(cmd.Process.Pid)
 	}
 
 	err := cmd.Wait()
