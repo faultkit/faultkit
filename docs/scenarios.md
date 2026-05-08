@@ -266,7 +266,7 @@ a real `EACCES`, because that's what the kernel returned.
 
 eBPF scenarios require Linux 5.8 or newer with `CAP_BPF` and
 `CAP_NET_ADMIN` capabilities (or root). On other platforms,
-`faultkit doctor` will report these scenarios as unavailable.
+`faultkit check` will report these scenarios as unavailable.
 
 ### `flaky-network`
 

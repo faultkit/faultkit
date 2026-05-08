@@ -132,7 +132,7 @@ func TestRunTargetFailsExitsTargetFailed(t *testing.T) {
 	}
 }
 
-func TestRunModeEBPFNotImplemented(t *testing.T) {
+func TestRunModeEBPFRejected(t *testing.T) {
 	code, _, stderr := runCLI(t, "run",
 		"--scenario", "llm-api-degraded",
 		"--mode", "ebpf",
@@ -140,6 +140,18 @@ func TestRunModeEBPFNotImplemented(t *testing.T) {
 	)
 	if code != cli.ExitInternalError {
 		t.Fatalf("code=%d, want %d (stderr=%q)", code, cli.ExitInternalError, stderr)
+	}
+}
+
+func TestCheckPrintsPlatformAndModes(t *testing.T) {
+	code, out, _ := runCLI(t, "check")
+	if code != cli.ExitOK {
+		t.Fatalf("code=%d, want %d", code, cli.ExitOK)
+	}
+	for _, want := range []string{"platform:", "proxy", "ebpf", "mode:"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing %q: %s", want, out)
+		}
 	}
 }
 

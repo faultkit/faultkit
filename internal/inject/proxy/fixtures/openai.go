@@ -3,28 +3,8 @@ package fixtures
 import (
 	"encoding/json"
 	"net/http"
-
-	"github.com/faultkit-dev/faultkit/pkg/faulttypes"
 )
 
-func openAIResponse(fault faulttypes.Fault) Synthetic {
-	status := defaultStatus(fault)
-	headers := mergeHeaders(fault, "application/json")
-
-	if fault.ResponseBody != "" {
-		return Synthetic{Status: status, Headers: headers, Body: []byte(fault.ResponseBody)}
-	}
-
-	if status >= 400 {
-		return Synthetic{Status: status, Headers: headers, Body: openAIErrorBody(status)}
-	}
-
-	return Synthetic{Status: status, Headers: headers, Body: []byte("{}")}
-}
-
-// openAIErrorBody returns the OpenAI error envelope for status. The
-// four common statuses are precomputed; uncommon statuses fall back
-// to a dynamically-marshaled body.
 func openAIErrorBody(status int) []byte {
 	if b, ok := openAIErrorBodies[status]; ok {
 		return b

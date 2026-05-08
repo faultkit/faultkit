@@ -87,10 +87,6 @@ func usageArgs(v cobra.PositionalArgs) cobra.PositionalArgs {
 	}
 }
 
-func errNotImpl(cmd string) error {
-	return fmt.Errorf("%s: not yet implemented", cmd)
-}
-
 func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
 		Use:           "faultkit",
@@ -102,6 +98,6 @@ func newRootCmd() *cobra.Command {
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
 		return &usageError{err}
 	})
-	root.AddCommand(newVersionCmd(), newScenarioCmd(), newRunCmd(), newDoctorCmd())
+	root.AddCommand(newVersionCmd(), newScenarioCmd(), newRunCmd(), newCheckCmd())
 	return root
 }

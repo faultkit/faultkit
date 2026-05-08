@@ -200,7 +200,7 @@ go install github.com/faultkit-dev/faultkit/cmd/faultkit@latest
 - Proxy-mode scenarios: any platform with a working Go runtime. No privileges.
 - eBPF-mode scenarios: Linux 5.8+ with BTF enabled, `CAP_BPF` + `CAP_NET_ADMIN` (or root).
 
-Run `faultkit doctor` after install — it tells you which modes are available on your machine and why.
+Run `faultkit check` after install — it tells you which modes are available on your machine and why.
 
 ---
 
@@ -234,7 +234,7 @@ More CI recipes: [examples/](./examples/).
 - HTTPS proxy injector with `llm-api-degraded`, `malformed-json-response`, `llm-streaming-cutoff`
 - eBPF injector with `flaky-network`, `tool-permission-denied`
 - YAML scenario loading
-- Auto-mode selection, `faultkit doctor`, distinct exit codes
+- Auto-mode selection, `faultkit check`, distinct exit codes
 - GitHub Actions integration
 
 **Next (v0.2)**
