@@ -9,13 +9,18 @@ LDFLAGS := -X $(CLI_PKG).version=$(VERSION) \
            -X $(CLI_PKG).commit=$(COMMIT) \
            -X $(CLI_PKG).date=$(DATE)
 
-.PHONY: build test lint sec bpf clean
+.PHONY: build test test-integration lint sec bpf clean
 
 build:
 	go build -ldflags '$(LDFLAGS)' -o bin/faultkit ./cmd/faultkit
 
 test:
 	go test ./...
+
+# End-to-end tests against real client SDKs. Each test skips if its
+# prereqs aren't met (e.g. python3+pytest+openai for the proxy test).
+test-integration: build
+	go test -tags integration ./test/integration/...
 
 lint:
 	go vet ./...
