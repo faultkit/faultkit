@@ -9,7 +9,7 @@ LDFLAGS := -X $(CLI_PKG).version=$(VERSION) \
            -X $(CLI_PKG).commit=$(COMMIT) \
            -X $(CLI_PKG).date=$(DATE)
 
-.PHONY: build test test-integration lint sec bpf clean
+.PHONY: build test test-integration test-docker lint sec bpf clean
 
 build:
 	go build -ldflags '$(LDFLAGS)' -o bin/faultkit ./cmd/faultkit
@@ -21,6 +21,12 @@ test:
 # prereqs aren't met (e.g. python3+pytest+openai for the proxy test).
 test-integration: build
 	go test -tags integration ./test/integration/...
+
+# Run the integration tests inside a reproducible container so
+# contributors don't need python3+pytest+openai installed locally.
+test-docker:
+	docker build -f test/docker/Dockerfile -t faultkit-test:latest .
+	docker run --rm faultkit-test:latest
 
 lint:
 	go vet ./...
