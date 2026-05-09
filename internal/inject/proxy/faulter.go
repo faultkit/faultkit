@@ -138,7 +138,7 @@ func applySynthetic(res *http.Response, syn fixtures.Synthetic) {
 // emit publishes a fired-fault event. Drops silently when the buffer
 // is full so the proxy hot path never blocks; consumers must drain.
 func (f *Faulter) emit(req *http.Request, exp *scenario.Experiment, host string) {
-	f.send(buildEvent(req, exp, host, true, ""))
+	inject.TrySend(f.events, buildEvent(req, exp, host, true, ""))
 }
 
 // emitErr publishes a non-fatal error encountered while applying a
@@ -149,17 +149,7 @@ func (f *Faulter) emitErr(req *http.Request, exp *scenario.Experiment, host stri
 	if err == nil {
 		return
 	}
-	f.send(buildEvent(req, exp, host, true, err.Error()))
-}
-
-func (f *Faulter) send(ev inject.Event) {
-	if f.events == nil {
-		return
-	}
-	select {
-	case f.events <- ev:
-	default:
-	}
+	inject.TrySend(f.events, buildEvent(req, exp, host, true, err.Error()))
 }
 
 func buildEvent(req *http.Request, exp *scenario.Experiment, host string, fired bool, errMsg string) inject.Event {

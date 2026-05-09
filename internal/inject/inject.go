@@ -54,3 +54,13 @@ type Injector interface {
 type PIDAware interface {
 	SetTargetPID(pid int) error
 }
+
+// TrySend non-blockingly sends ev on ch, dropping when the buffer is
+// full. Implements the "never block the request hot path" half of the
+// Events contract.
+func TrySend(ch chan<- Event, ev Event) {
+	select {
+	case ch <- ev:
+	default:
+	}
+}

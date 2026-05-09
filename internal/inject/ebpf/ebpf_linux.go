@@ -201,7 +201,7 @@ func (i *Injector) readEvents() {
 			if errors.Is(err, ringbuf.ErrClosed) {
 				return
 			}
-			i.send(inject.Event{
+			inject.TrySend(i.events, inject.Event{
 				Experiment: i.scenarioName,
 				Syscall:    i.syscallName,
 				Timestamp:  time.Now(),
@@ -213,7 +213,7 @@ func (i *Injector) readEvents() {
 		if !ok {
 			continue
 		}
-		i.send(inject.Event{
+		inject.TrySend(i.events, inject.Event{
 			Experiment: i.scenarioName,
 			Fired:      true,
 			Syscall:    i.syscallName,
@@ -238,13 +238,6 @@ func decodeFaultEvent(b []byte) (faultEventRaw, bool) {
 		tsNS: binary.LittleEndian.Uint64(b[0:8]),
 		pid:  binary.LittleEndian.Uint32(b[8:12]),
 	}, true
-}
-
-func (i *Injector) send(ev inject.Event) {
-	select {
-	case i.events <- ev:
-	default:
-	}
 }
 
 // Stop detaches the kprobes and closes the BPF objects. Idempotent.
