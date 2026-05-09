@@ -36,6 +36,12 @@ func TestMatcher(t *testing.T) {
 				Probability: 1,
 			},
 			{
+				Name:        "wildcard-path",
+				Fault:       faulttypes.Fault{HTTPStatus: 502},
+				Match:       scenario.Match{Host: "wild.test", Path: "/v1/*"},
+				Probability: 1,
+			},
+			{
 				Name:        "syscall-only-ignored",
 				Fault:       faulttypes.Fault{Errno: "ECONNRESET"},
 				Match:       scenario.Match{Syscall: "recvmsg"},
@@ -55,6 +61,9 @@ func TestMatcher(t *testing.T) {
 		{"wildcard match", "https://api.example.com/anything", "wildcard-host"},
 		{"case-insensitive host", "https://API.OpenAI.com/v1/chat/completions", "exact"},
 		{"host with port", "https://api.openai.com:443/v1/chat/completions", "exact"},
+		{"path glob crosses slash", "https://wild.test/v1/chat/completions", "wildcard-path"},
+		{"path glob single segment", "https://wild.test/v1/models", "wildcard-path"},
+		{"path glob no match", "https://wild.test/health", ""},
 		{"no match", "https://other.com/", ""},
 	}
 	for _, c := range cases {
