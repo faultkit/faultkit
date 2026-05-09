@@ -64,7 +64,7 @@ type toolPermDeniedProgramSpecs struct {
 // It can be passed ebpf.CollectionSpec.Assign.
 type toolPermDeniedMapSpecs struct {
 	FaultConfig *ebpf.MapSpec `ebpf:"fault_config"`
-	FaultCount  *ebpf.MapSpec `ebpf:"fault_count"`
+	FaultEvents *ebpf.MapSpec `ebpf:"fault_events"`
 }
 
 // toolPermDeniedVariableSpecs contains global variables before they are loaded into the kernel.
@@ -94,13 +94,13 @@ func (o *toolPermDeniedObjects) Close() error {
 // It can be passed to loadToolPermDeniedObjects or ebpf.CollectionSpec.LoadAndAssign.
 type toolPermDeniedMaps struct {
 	FaultConfig *ebpf.Map `ebpf:"fault_config"`
-	FaultCount  *ebpf.Map `ebpf:"fault_count"`
+	FaultEvents *ebpf.Map `ebpf:"fault_events"`
 }
 
 func (m *toolPermDeniedMaps) Close() error {
 	return _ToolPermDeniedClose(
 		m.FaultConfig,
-		m.FaultCount,
+		m.FaultEvents,
 	)
 }
 

@@ -65,7 +65,7 @@ type flakyNetworkProgramSpecs struct {
 // It can be passed ebpf.CollectionSpec.Assign.
 type flakyNetworkMapSpecs struct {
 	FaultConfig *ebpf.MapSpec `ebpf:"fault_config"`
-	FaultCount  *ebpf.MapSpec `ebpf:"fault_count"`
+	FaultEvents *ebpf.MapSpec `ebpf:"fault_events"`
 }
 
 // flakyNetworkVariableSpecs contains global variables before they are loaded into the kernel.
@@ -95,13 +95,13 @@ func (o *flakyNetworkObjects) Close() error {
 // It can be passed to loadFlakyNetworkObjects or ebpf.CollectionSpec.LoadAndAssign.
 type flakyNetworkMaps struct {
 	FaultConfig *ebpf.Map `ebpf:"fault_config"`
-	FaultCount  *ebpf.Map `ebpf:"fault_count"`
+	FaultEvents *ebpf.Map `ebpf:"fault_events"`
 }
 
 func (m *flakyNetworkMaps) Close() error {
 	return _FlakyNetworkClose(
 		m.FaultConfig,
-		m.FaultCount,
+		m.FaultEvents,
 	)
 }
 

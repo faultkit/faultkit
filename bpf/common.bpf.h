@@ -18,12 +18,18 @@ struct {
 	__type(value, __u32);
 } fault_config SEC(".maps");
 
-// fault_count: index 0 -> count of faults fired since program load.
+// fault_events: per-fault records pushed to userspace.
+// 256 KiB is enough headroom for tens of thousands of buffered events
+// even when userspace reader is briefly stalled by GC.
 struct {
-	__uint(type, BPF_MAP_TYPE_ARRAY);
-	__uint(max_entries, 1);
-	__type(key, __u32);
-	__type(value, __u64);
-} fault_count SEC(".maps");
+	__uint(type, BPF_MAP_TYPE_RINGBUF);
+	__uint(max_entries, 256 * 1024);
+} fault_events SEC(".maps");
+
+struct fault_event {
+	__u64 ts_ns;
+	__u32 pid;
+	__u32 _pad;
+};
 
 #endif

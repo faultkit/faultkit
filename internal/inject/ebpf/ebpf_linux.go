@@ -4,14 +4,17 @@ package ebpf
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
+	"os"
 	"sync"
 	"syscall"
 	"time"
 
 	cebpf "github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
+	"github.com/cilium/ebpf/ringbuf"
 	"github.com/cilium/ebpf/rlimit"
 
 	"github.com/faultkit-dev/faultkit/internal/inject"
@@ -21,11 +24,6 @@ import (
 // prSetDumpable is the prctl(2) op number; not exported by the
 // stdlib's syscall package on its own.
 const prSetDumpable = 4
-
-// faultPollInterval bounds event-emit latency without spinning. The
-// kernel-side override_return is the actual fault path; the poller
-// only synthesizes user-facing events from a counter.
-const faultPollInterval = 50 * time.Millisecond
 
 // Scenario gate values. The gate keys the dispatch in Start: a
 // scenario whose first syscall experiment matches one of these pairs
@@ -41,7 +39,7 @@ const (
 type Injector struct {
 	closeObjs   func() error
 	faultConfig *cebpf.Map
-	faultCount  *cebpf.Map
+	reader      *ringbuf.Reader
 	links       []link.Link
 
 	probabilityPerThousand uint32
@@ -49,8 +47,7 @@ type Injector struct {
 	syscallName            string
 	events                 chan inject.Event
 
-	pollerStop chan struct{}
-	pollerDone chan struct{}
+	readerDone chan struct{}
 
 	stopOnce sync.Once
 	stopErr  error
@@ -76,27 +73,32 @@ func (i *Injector) Start(_ context.Context, s *scenario.Scenario) ([]string, err
 	i.scenarioName = s.Name
 	i.syscallName = exp.Match.Syscall
 
-	allowSelfMemRead()
-
 	if err := rlimit.RemoveMemlock(); err != nil {
 		return nil, fmt.Errorf("ebpf: rlimit memlock: %w", err)
 	}
 
+	// dumpable=1 is required for /proc/self/mem reads cilium/ebpf does
+	// during BTF detection at load. Scope to the load call only — keep
+	// the post-load process ptrace-protected for the duration of the
+	// run so the in-memory CA private key isn't ptrace-readable by a
+	// co-tenant. No-op when running as root (already dumpable).
+	dumpableRestore := withDumpable()
 	switch {
 	case exp.Match.Syscall == flakyNetworkSyscall && exp.Fault.Errno == flakyNetworkErrno:
 		err = i.loadFlakyNetwork()
 	case exp.Match.Syscall == toolPermSyscall && exp.Fault.Errno == toolPermErrno:
 		err = i.loadToolPermDenied()
 	default:
+		dumpableRestore()
 		return nil, fmt.Errorf("ebpf: no eBPF program for syscall=%q errno=%q", exp.Match.Syscall, exp.Fault.Errno)
 	}
+	dumpableRestore()
 	if err != nil {
 		return nil, err
 	}
 
-	i.pollerStop = make(chan struct{})
-	i.pollerDone = make(chan struct{})
-	go i.pollFaultCount()
+	i.readerDone = make(chan struct{})
+	go i.readEvents()
 
 	return nil, nil
 }
@@ -108,7 +110,9 @@ func (i *Injector) loadFlakyNetwork() error {
 	}
 	i.closeObjs = objs.Close
 	i.faultConfig = objs.FaultConfig
-	i.faultCount = objs.FaultCount
+	if err := i.openReader(objs.FaultEvents); err != nil {
+		return err
+	}
 
 	return i.attachKprobes([]kprobeTarget{
 		{"__x64_sys_recvmsg", objs.FlakyNetworkRecvmsg},
@@ -125,13 +129,26 @@ func (i *Injector) loadToolPermDenied() error {
 	}
 	i.closeObjs = objs.Close
 	i.faultConfig = objs.FaultConfig
-	i.faultCount = objs.FaultCount
+	if err := i.openReader(objs.FaultEvents); err != nil {
+		return err
+	}
 
 	return i.attachKprobes([]kprobeTarget{
 		{"__x64_sys_openat", objs.ToolPermDeniedOpenat},
 		{"wake_up_new_task", objs.ToolPermDeniedTrackFork},
 		{"do_exit", objs.ToolPermDeniedTrackExit},
 	})
+}
+
+func (i *Injector) openReader(m *cebpf.Map) error {
+	r, err := ringbuf.NewReader(m)
+	if err != nil {
+		_ = i.closeObjs()
+		i.closeObjs = nil
+		return fmt.Errorf("ebpf: open ringbuf reader: %w", err)
+	}
+	i.reader = r
+	return nil
 }
 
 type kprobeTarget struct {
@@ -172,51 +189,70 @@ func (i *Injector) SetTargetPID(pid int) error {
 	return nil
 }
 
-func (i *Injector) pollFaultCount() {
-	defer close(i.pollerDone)
+// readEvents reads fault records pushed by the BPF program and
+// translates each to an inject.Event. Exits when reader.Close() is
+// called from Stop, which makes Read return ringbuf.ErrClosed.
+func (i *Injector) readEvents() {
+	defer close(i.readerDone)
 
-	t := time.NewTicker(faultPollInterval)
-	defer t.Stop()
-
-	var prev uint64
-	zero := uint32(0)
 	for {
-		select {
-		case <-i.pollerStop:
+		rec, err := i.reader.Read()
+		if err != nil {
+			if errors.Is(err, ringbuf.ErrClosed) {
+				return
+			}
+			i.send(inject.Event{
+				Experiment: i.scenarioName,
+				Syscall:    i.syscallName,
+				Timestamp:  time.Now(),
+				Err:        fmt.Sprintf("ringbuf read: %v", err),
+			})
 			return
-		case <-t.C:
-			var cur uint64
-			if err := i.faultCount.Lookup(&zero, &cur); err != nil {
-				continue
-			}
-			if cur < prev {
-				prev = cur
-				continue
-			}
-			delta := cur - prev
-			prev = cur
-			for n := uint64(0); n < delta; n++ {
-				ev := inject.Event{
-					Experiment: i.scenarioName,
-					Fired:      true,
-					Syscall:    i.syscallName,
-					Timestamp:  time.Now(),
-				}
-				select {
-				case i.events <- ev:
-				default:
-				}
-			}
 		}
+		ev, ok := decodeFaultEvent(rec.RawSample)
+		if !ok {
+			continue
+		}
+		i.send(inject.Event{
+			Experiment: i.scenarioName,
+			Fired:      true,
+			Syscall:    i.syscallName,
+			PID:        int(ev.pid),
+			Timestamp:  time.Now(),
+		})
+	}
+}
+
+type faultEventRaw struct {
+	tsNS uint64
+	pid  uint32
+}
+
+// decodeFaultEvent matches the BPF `struct fault_event` layout
+// (__u64 ts_ns, __u32 pid, __u32 _pad).
+func decodeFaultEvent(b []byte) (faultEventRaw, bool) {
+	if len(b) < 16 {
+		return faultEventRaw{}, false
+	}
+	return faultEventRaw{
+		tsNS: binary.LittleEndian.Uint64(b[0:8]),
+		pid:  binary.LittleEndian.Uint32(b[8:12]),
+	}, true
+}
+
+func (i *Injector) send(ev inject.Event) {
+	select {
+	case i.events <- ev:
+	default:
 	}
 }
 
 // Stop detaches the kprobes and closes the BPF objects. Idempotent.
 func (i *Injector) Stop(_ context.Context) error {
 	i.stopOnce.Do(func() {
-		if i.pollerStop != nil {
-			close(i.pollerStop)
-			<-i.pollerDone
+		if i.reader != nil {
+			_ = i.reader.Close()
+			<-i.readerDone
 		}
 		i.closeLinks()
 		if i.closeObjs != nil {
@@ -239,20 +275,23 @@ func (i *Injector) closeLinks() {
 	i.links = nil
 }
 
-// allowSelfMemRead lifts the kernel's `dumpable` flag back to 1 so
-// /proc/self/mem is readable from this process. cilium/ebpf needs that
-// for kernel-version detection on load. No-op when already dumpable
-// (running as root, or no file caps in play); when running with file
-// caps the prctl requires CAP_SYS_PTRACE to succeed.
+// withDumpable lifts the kernel's `dumpable` flag to 1 so /proc/self/mem
+// is readable from this process. cilium/ebpf needs that for
+// kernel-version detection during BPF load. The returned restore
+// function flips it back to 0 — keep the post-load process
+// ptrace-protected so the in-memory CA private key (when running with
+// the proxy) and other state aren't readable by a co-tenant.
 //
-// Trade-off: with dumpable=1, other same-user processes can ptrace
-// this process and read its memory while it's running. faultkit is a
-// developer tool — the assumed environment is a developer's machine
-// or a single-tenant CI runner with no hostile co-tenants. If that
-// doesn't fit, run faultkit under sudo instead and skip the file-caps
-// path entirely.
-func allowSelfMemRead() {
+// Skipped when already root: dumpable is already 1 there, the prctl
+// would be a no-op going up and an unwanted change going down.
+func withDumpable() func() {
+	if os.Geteuid() == 0 {
+		return func() {}
+	}
 	_, _, _ = syscall.Syscall(syscall.SYS_PRCTL, prSetDumpable, 1, 0)
+	return func() {
+		_, _, _ = syscall.Syscall(syscall.SYS_PRCTL, prSetDumpable, 0, 0)
+	}
 }
 
 func firstSyscallExp(s *scenario.Scenario) (*scenario.Experiment, error) {

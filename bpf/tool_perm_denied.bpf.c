@@ -24,10 +24,12 @@ static __always_inline int maybe_inject(struct pt_regs *ctx) {
 		return 0;
 	}
 
-	__u32 zero = 0;
-	__u64 *count = bpf_map_lookup_elem(&fault_count, &zero);
-	if (count) {
-		__sync_fetch_and_add(count, 1);
+	struct fault_event *ev = bpf_ringbuf_reserve(&fault_events, sizeof(*ev), 0);
+	if (ev) {
+		ev->ts_ns = bpf_ktime_get_ns();
+		ev->pid = pid;
+		ev->_pad = 0;
+		bpf_ringbuf_submit(ev, 0);
 	}
 
 	bpf_override_return(ctx, -EACCES);
