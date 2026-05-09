@@ -70,16 +70,16 @@ func TestStartRejectsUnsupportedScenario(t *testing.T) {
 	t.Cleanup(func() { _ = inj.Stop(context.Background()) })
 
 	s := &scenario.Scenario{
-		Name: "tool-permission-denied",
+		Name: "made-up",
 		Experiments: []scenario.Experiment{{
 			Name:        "x",
-			Fault:       faulttypes.Fault{Errno: "EACCES"},
-			Match:       scenario.Match{Syscall: "openat"},
+			Fault:       faulttypes.Fault{Errno: "EIO"},
+			Match:       scenario.Match{Syscall: "write"},
 			Probability: 0.1,
 		}},
 	}
 	if _, err := inj.Start(context.Background(), s); err == nil {
-		t.Errorf("expected error for unimplemented scenario, got nil")
+		t.Errorf("expected error for unimplemented (write/EIO), got nil")
 	}
 }
 
@@ -87,19 +87,43 @@ func TestStartLoadsKernelProgram(t *testing.T) {
 	if os.Geteuid() != 0 {
 		t.Skip("requires root or CAP_BPF; run with sudo to exercise the BPF loader")
 	}
-	inj := New()
-	t.Cleanup(func() { _ = inj.Stop(context.Background()) })
 
-	s := &scenario.Scenario{
-		Name: "flaky-network",
-		Experiments: []scenario.Experiment{{
-			Name:        "tcp-recv-reset",
-			Fault:       faulttypes.Fault{Errno: "ECONNRESET"},
-			Match:       scenario.Match{Syscall: "recvmsg"},
-			Probability: 0.1,
-		}},
+	cases := []struct {
+		name string
+		s    *scenario.Scenario
+	}{
+		{
+			name: "flaky-network",
+			s: &scenario.Scenario{
+				Name: "flaky-network",
+				Experiments: []scenario.Experiment{{
+					Name:        "tcp-recv-reset",
+					Fault:       faulttypes.Fault{Errno: "ECONNRESET"},
+					Match:       scenario.Match{Syscall: "recvmsg"},
+					Probability: 0.1,
+				}},
+			},
+		},
+		{
+			name: "tool-permission-denied",
+			s: &scenario.Scenario{
+				Name: "tool-permission-denied",
+				Experiments: []scenario.Experiment{{
+					Name:        "openat-eacces",
+					Fault:       faulttypes.Fault{Errno: "EACCES"},
+					Match:       scenario.Match{Syscall: "openat"},
+					Probability: 0.05,
+				}},
+			},
+		},
 	}
-	if _, err := inj.Start(context.Background(), s); err != nil {
-		t.Fatalf("Start: %v", err)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			inj := New()
+			t.Cleanup(func() { _ = inj.Stop(context.Background()) })
+			if _, err := inj.Start(context.Background(), c.s); err != nil {
+				t.Fatalf("Start: %v", err)
+			}
+		})
 	}
 }
