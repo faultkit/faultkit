@@ -106,7 +106,9 @@ func (f *Faulter) ModifyResponse(res *http.Response) error {
 	host := normalizeHost(hostFromRequest(res.Request))
 
 	if exp.Fault.StreamCutoffTokens > 0 {
-		wrapStreamCutoff(res, exp.Fault.StreamCutoffTokens)
+		wrapStreamCutoff(res, exp.Fault.StreamCutoffTokens, func(err error) {
+			f.emitErr(res.Request, exp, host, err)
+		})
 		f.emit(res.Request, exp, host)
 		return nil
 	}
@@ -136,23 +138,42 @@ func applySynthetic(res *http.Response, syn fixtures.Synthetic) {
 // emit publishes a fired-fault event. Drops silently when the buffer
 // is full so the proxy hot path never blocks; consumers must drain.
 func (f *Faulter) emit(req *http.Request, exp *scenario.Experiment, host string) {
-	if f.events == nil {
+	f.send(buildEvent(req, exp, host, true, ""))
+}
+
+// emitErr publishes a non-fatal error encountered while applying a
+// fault (e.g. upstream stream read error during stream-cutoff). Fired
+// stays true because the fault behavior was applied even when readout
+// later failed; the Err field surfaces the failure to the user.
+func (f *Faulter) emitErr(req *http.Request, exp *scenario.Experiment, host string, err error) {
+	if err == nil {
 		return
 	}
-	path := ""
-	if req.URL != nil {
-		path = req.URL.Path
-	}
-	ev := inject.Event{
-		Experiment: exp.Name,
-		Fault:      exp.Fault,
-		Fired:      true,
-		Host:       host,
-		Path:       path,
-		Timestamp:  time.Now(),
+	f.send(buildEvent(req, exp, host, true, err.Error()))
+}
+
+func (f *Faulter) send(ev inject.Event) {
+	if f.events == nil {
+		return
 	}
 	select {
 	case f.events <- ev:
 	default:
+	}
+}
+
+func buildEvent(req *http.Request, exp *scenario.Experiment, host string, fired bool, errMsg string) inject.Event {
+	path := ""
+	if req != nil && req.URL != nil {
+		path = req.URL.Path
+	}
+	return inject.Event{
+		Experiment: exp.Name,
+		Fault:      exp.Fault,
+		Fired:      fired,
+		Host:       host,
+		Path:       path,
+		Timestamp:  time.Now(),
+		Err:        errMsg,
 	}
 }
