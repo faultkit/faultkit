@@ -192,6 +192,11 @@ func (i *Injector) SetTargetPID(pid int) error {
 // readEvents reads fault records pushed by the BPF program and
 // translates each to an inject.Event. Exits when reader.Close() is
 // called from Stop, which makes Read return ringbuf.ErrClosed.
+//
+// The BPF `struct fault_event` is u64 ts_ns + u32 pid + u32 pad. We
+// only consume pid; the kernel timestamp is discarded in favor of
+// time.Now() at userspace receive (within tens of microseconds via
+// ringbuf, fine for reporting and avoids monotonic→wall conversion).
 func (i *Injector) readEvents() {
 	defer close(i.readerDone)
 
@@ -209,35 +214,18 @@ func (i *Injector) readEvents() {
 			})
 			return
 		}
-		ev, ok := decodeFaultEvent(rec.RawSample)
-		if !ok {
+		if len(rec.RawSample) < 12 {
 			continue
 		}
+		pid := binary.LittleEndian.Uint32(rec.RawSample[8:12])
 		inject.TrySend(i.events, inject.Event{
 			Experiment: i.scenarioName,
 			Fired:      true,
 			Syscall:    i.syscallName,
-			PID:        int(ev.pid),
+			PID:        int(pid),
 			Timestamp:  time.Now(),
 		})
 	}
-}
-
-type faultEventRaw struct {
-	tsNS uint64
-	pid  uint32
-}
-
-// decodeFaultEvent matches the BPF `struct fault_event` layout
-// (__u64 ts_ns, __u32 pid, __u32 _pad).
-func decodeFaultEvent(b []byte) (faultEventRaw, bool) {
-	if len(b) < 16 {
-		return faultEventRaw{}, false
-	}
-	return faultEventRaw{
-		tsNS: binary.LittleEndian.Uint64(b[0:8]),
-		pid:  binary.LittleEndian.Uint32(b[8:12]),
-	}, true
 }
 
 // Stop detaches the kprobes and closes the BPF objects. Idempotent.
@@ -275,8 +263,8 @@ func (i *Injector) closeLinks() {
 // ptrace-protected so the in-memory CA private key (when running with
 // the proxy) and other state aren't readable by a co-tenant.
 //
-// Skipped when already root: dumpable is already 1 there, the prctl
-// would be a no-op going up and an unwanted change going down.
+// Skipped when running as root: dumpable is already 1, and the
+// restore would needlessly flip a flag we never raised.
 func withDumpable() func() {
 	if os.Geteuid() == 0 {
 		return func() {}
