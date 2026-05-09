@@ -135,24 +135,22 @@ func applySynthetic(res *http.Response, syn fixtures.Synthetic) {
 	res.Header.Set(syntheticHeader, "true")
 }
 
-// emit publishes a fired-fault event. Drops silently when the buffer
-// is full so the proxy hot path never blocks; consumers must drain.
 func (f *Faulter) emit(req *http.Request, exp *scenario.Experiment, host string) {
-	inject.TrySend(f.events, buildEvent(req, exp, host, true, ""))
+	inject.TrySend(f.events, buildEvent(req, exp, host, ""))
 }
 
 // emitErr publishes a non-fatal error encountered while applying a
 // fault (e.g. upstream stream read error during stream-cutoff). Fired
-// stays true because the fault behavior was applied even when readout
-// later failed; the Err field surfaces the failure to the user.
+// stays true because the fault behavior was applied; the Err field
+// surfaces the readout failure separately.
 func (f *Faulter) emitErr(req *http.Request, exp *scenario.Experiment, host string, err error) {
 	if err == nil {
 		return
 	}
-	inject.TrySend(f.events, buildEvent(req, exp, host, true, err.Error()))
+	inject.TrySend(f.events, buildEvent(req, exp, host, err.Error()))
 }
 
-func buildEvent(req *http.Request, exp *scenario.Experiment, host string, fired bool, errMsg string) inject.Event {
+func buildEvent(req *http.Request, exp *scenario.Experiment, host, errMsg string) inject.Event {
 	path := ""
 	if req != nil && req.URL != nil {
 		path = req.URL.Path
@@ -160,7 +158,7 @@ func buildEvent(req *http.Request, exp *scenario.Experiment, host string, fired 
 	return inject.Event{
 		Experiment: exp.Name,
 		Fault:      exp.Fault,
-		Fired:      fired,
+		Fired:      true,
 		Host:       host,
 		Path:       path,
 		Timestamp:  time.Now(),
