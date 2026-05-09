@@ -13,8 +13,15 @@ const sseContentType = "text/event-stream"
 // wrapStreamCutoff replaces res.Body with a reader that forwards the
 // upstream stream line-by-line until cutAt SSE `data:` events have
 // been seen, then closes the connection without emitting the
-// `[DONE]` sentinel. No-op for non-SSE responses.
-func wrapStreamCutoff(res *http.Response, cutAt int) {
+// `[DONE]` sentinel. Scanner errors and oversize-line failures are
+// reported via onErr so a corrupt upstream looks different from a
+// clean cut. No-op for non-SSE responses.
+//
+// The goroutine exits cooperatively when downstream Close propagates
+// through streamBody → io.Pipe → pw.Write returns io.ErrClosedPipe.
+// This is the contract that lets us avoid an extra signal channel; if
+// the streamBody wrapper is removed, the goroutine becomes a leak.
+func wrapStreamCutoff(res *http.Response, cutAt int, onErr func(error)) {
 	if !isSSE(res) {
 		return
 	}
@@ -44,10 +51,11 @@ func wrapStreamCutoff(res *http.Response, cutAt int) {
 				}
 			}
 		}
+		if err := scanner.Err(); err != nil && onErr != nil {
+			onErr(err)
+		}
 	}()
 
-	// Closing res.Body downstream must propagate to upstream so the
-	// goroutine unblocks and the upstream connection is released.
 	res.Body = &streamBody{ReadCloser: pr, upstream: upstream}
 	res.Header.Del("Content-Length")
 	res.ContentLength = -1
