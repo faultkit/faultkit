@@ -78,9 +78,8 @@ func runFaultkit(parentCtx context.Context, o runOpts) error {
 		return fmt.Errorf("starting injector: %w", err)
 	}
 
-	// Drain events as they fire so the bounded channel never backs
-	// up and drops on long runs. The goroutine exits when Stop closes
-	// the channel.
+	// Drain concurrently so the bounded events channel never backs
+	// up and drops on long runs.
 	drainDone := make(chan []inject.Event, 1)
 	go func() {
 		drainDone <- drainEvents(inj.Events())
