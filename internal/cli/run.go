@@ -78,6 +78,14 @@ func runFaultkit(parentCtx context.Context, o runOpts) error {
 		return fmt.Errorf("starting injector: %w", err)
 	}
 
+	// Drain events as they fire so the bounded channel never backs
+	// up and drops on long runs. The goroutine exits when Stop closes
+	// the channel.
+	drainDone := make(chan []inject.Event, 1)
+	go func() {
+		drainDone <- drainEvents(inj.Events())
+	}()
+
 	r := &runner.Runner{
 		Stdout: o.stdout,
 		Stderr: o.stderr,
@@ -99,7 +107,7 @@ func runFaultkit(parentCtx context.Context, o runOpts) error {
 		fmt.Fprintf(o.stderr, "warning: injector stop: %v\n", stopErr)
 	}
 
-	events := drainEvents(inj.Events())
+	events := <-drainDone
 
 	targetExit := 0
 	if result != nil {
@@ -152,8 +160,21 @@ func loadScenario(o runOpts) (*scenario.Scenario, error) {
 	}
 }
 
-func pickInjector(s *scenario.Scenario, mode string) (inject.Injector, error) {
-	hasHTTP, hasSyscall := false, false
+// scenarioMode returns the injection mode a scenario maps to in --auto:
+// modeProxy for any HTTP experiment, modeEBPF for syscall-only, or ""
+// when the scenario has no experiments any injector can serve.
+func scenarioMode(s *scenario.Scenario) string {
+	hasHTTP, hasSyscall := experimentKinds(s)
+	switch {
+	case hasHTTP:
+		return modeProxy
+	case hasSyscall:
+		return modeEBPF
+	}
+	return ""
+}
+
+func experimentKinds(s *scenario.Scenario) (hasHTTP, hasSyscall bool) {
 	for _, exp := range s.Experiments {
 		if exp.Match.IsHTTP() {
 			hasHTTP = true
@@ -162,7 +183,11 @@ func pickInjector(s *scenario.Scenario, mode string) (inject.Injector, error) {
 			hasSyscall = true
 		}
 	}
+	return hasHTTP, hasSyscall
+}
 
+func pickInjector(s *scenario.Scenario, mode string) (inject.Injector, error) {
+	hasHTTP, hasSyscall := experimentKinds(s)
 	switch mode {
 	case modeAuto:
 		switch {
