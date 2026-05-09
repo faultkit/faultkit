@@ -1,0 +1,10 @@
+name: llm-streaming-cutoff-local
+description: llm-streaming-cutoff scenario adapted for the local mock server.
+experiments:
+  - name: drop-after-3-tokens
+    fault:
+      stream_cutoff_tokens: 3
+    match:
+      host: 127.0.0.1*
+      path: /v1/*
+    probability: 1.0
