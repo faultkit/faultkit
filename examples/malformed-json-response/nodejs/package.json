@@ -1,0 +1,12 @@
+{
+  "name": "faultkit-example-malformed-json-response",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test.js"
+  },
+  "dependencies": {
+    "openai": "^5.0.0",
+    "undici": "^7.0.0"
+  }
+}

@@ -5,21 +5,23 @@ syntactically invalid JSON.
 
 ## The bug
 
-`agent.py`'s `decide_tool` passes the model's content directly to
-`json.loads` and returns the result. No try/except, no schema
-validation. When the model returns malformed JSON (a trailing comma,
-an unescaped quote, a truncated structure), `json.loads` raises and
-the exception propagates through the agent loop.
+The `decideTool` agent (in `python/agent.py` and `nodejs/agent.js`)
+passes the model's content directly to `json.loads` / `JSON.parse`
+and returns the result. No try/except, no schema validation. When
+the model returns malformed JSON (a trailing comma, an unescaped
+quote, a truncated structure), the parser raises and the exception
+propagates through the agent loop.
 
 ## Demo
 
 ```bash
-pip install -r requirements.txt
+# Python
+(cd python && pip install -r requirements.txt && pytest .)               # passes
+faultkit run --config scenario.yaml -- python3 -m pytest python/         # fails
 
-pytest .                                                # passes
-
-# Under faultkit (lands in v0.1 phases 2–5):
-faultkit run --config scenario.yaml -- pytest .         # fails
+# Node
+(cd nodejs && npm install && npm test)                                   # passes
+faultkit run --config scenario.yaml -- node --test nodejs/test.js        # fails
 ```
 
 The included `scenario.yaml` matches the local mock server and replaces

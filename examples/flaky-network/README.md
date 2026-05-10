@@ -5,21 +5,25 @@ returns `ECONNRESET` on a `recv` call.
 
 ## The bug
 
-`agent.py`'s `fetch` opens a TCP connection, sends an HTTP request, and
-reads the response. There is no retry on `ConnectionResetError`. When
-the kernel surfaces an `ECONNRESET`, the exception propagates and the
+The `fetch`/`fetchStatusLine` agent (in `python/agent.py` and
+`nodejs/agent.js`) opens a TCP connection, sends an HTTP request,
+and reads the response. There is no retry on `ECONNRESET`. When the
+kernel surfaces a connection reset, the exception propagates and the
 caller sees a hard failure.
 
 ## Demo
 
 ```bash
-pip install -r requirements.txt
+# Python
+(cd python && pip install -r requirements.txt && pytest .)               # passes
+faultkit run --scenario flaky-network -- python3 -m pytest python/       # fails
 
-pytest .                                                # passes
-
-# Linux 5.8+ only:
-faultkit run --scenario flaky-network -- pytest .       # fails under fault
+# Node
+(cd nodejs && npm install && npm test)                                   # passes
+faultkit run --scenario flaky-network -- node --test nodejs/test.js      # fails
 ```
+
+Linux 5.8+ for the eBPF injector.
 
 Under fault injection, faultkit's eBPF program rewrites `recvmsg`
 syscall return values to `-ECONNRESET` for processes inside the target
