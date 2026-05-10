@@ -104,7 +104,7 @@ match:
 
 | Field | Type | Notes |
 |---|---|---|
-| `host` | string | Glob against the request's host (no port). `*` matches any run of characters; `?` matches a single character. Case-insensitive. |
+| `host` | string | Glob against the request's host (no port). `*` matches any run of characters; `?` matches a single character. The request host is lowercased before matching, so write your pattern in lowercase. |
 | `path` | string | Glob against the request URL path. Same wildcard semantics as `host`. Optional — absence means "match any path on this host". |
 
 ### Syscall match (eBPF mode)
