@@ -28,7 +28,7 @@ jobs:
           python-version: '3.12'
 
       - name: Install python deps for integration test
-        run: pip install openai==2.36.0 pytest==8.3.4
+        run: pip install -r test/docker/requirements.txt
 
       - name: gofmt
         run: |
