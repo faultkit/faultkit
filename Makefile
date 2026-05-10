@@ -53,8 +53,14 @@ sec:
 		echo "  go install go.uber.org/nilaway/cmd/nilaway@latest"; \
 		exit 1; \
 	fi
+	@if ! command -v govulncheck >/dev/null 2>&1; then \
+		echo "govulncheck not installed; install with:"; \
+		echo "  go install golang.org/x/vuln/cmd/govulncheck@latest"; \
+		exit 1; \
+	fi
 	gosec ./...
 	nilaway -include-pkgs=github.com/faultkit-dev/faultkit ./...
+	govulncheck ./...
 
 bpf: bpf/vmlinux.h
 	go generate ./internal/inject/ebpf/...
