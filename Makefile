@@ -42,20 +42,27 @@ lint:
 		exit 1; \
 	fi
 
+# Pinned tool versions — see .github/workflows/ci.yml for the same pins.
+# `@latest` would defeat the supply-chain hardening (GOTOOLCHAIN=local +
+# pinned Go) one layer up.
+GOSEC_VERSION       := v2.22.9
+NILAWAY_VERSION     := v0.0.0-20260318203545-ad240b12fb4c
+GOVULNCHECK_VERSION := v1.3.0
+
 sec:
 	@if ! command -v gosec >/dev/null 2>&1; then \
 		echo "gosec not installed; install with:"; \
-		echo "  go install github.com/securego/gosec/v2/cmd/gosec@latest"; \
+		echo "  go install github.com/securego/gosec/v2/cmd/gosec@$(GOSEC_VERSION)"; \
 		exit 1; \
 	fi
 	@if ! command -v nilaway >/dev/null 2>&1; then \
 		echo "nilaway not installed; install with:"; \
-		echo "  go install go.uber.org/nilaway/cmd/nilaway@latest"; \
+		echo "  go install go.uber.org/nilaway/cmd/nilaway@$(NILAWAY_VERSION)"; \
 		exit 1; \
 	fi
 	@if ! command -v govulncheck >/dev/null 2>&1; then \
 		echo "govulncheck not installed; install with:"; \
-		echo "  go install golang.org/x/vuln/cmd/govulncheck@latest"; \
+		echo "  go install golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION)"; \
 		exit 1; \
 	fi
 	gosec ./...
