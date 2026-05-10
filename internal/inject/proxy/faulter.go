@@ -39,7 +39,7 @@ type Faulter struct {
 // time-seeded source is used.
 func NewFaulter(s *scenario.Scenario, events chan<- inject.Event, rng *rand.Rand) *Faulter {
 	if rng == nil {
-		// #nosec G404 -- math/rand is correct for fault-probability dice rolls; this isn't a security boundary.
+		// #nosec G404,G115 -- math/rand is correct for fault-probability dice rolls; this isn't a security boundary. UnixNano is positive for ~292 years past 1970, so the uint64 cast is safe.
 		rng = rand.New(rand.NewPCG(uint64(time.Now().UnixNano()), 0))
 	}
 	return &Faulter{
