@@ -15,8 +15,8 @@ Python and Node.js for each scenario.
 
 ### Added
 
-- **CLI** — `faultkit run`, `scenario list/show`, `version`, `check`,
-  `doctor`. Exit codes are part of the contract: `0` ok, `1` target
+- **CLI** — `faultkit run`, `scenario list/show`, `version`, `check`.
+  Exit codes are part of the contract: `0` ok, `1` target
   failed under fault, `2` internal error, `3` fault never fired,
   `4` usage error.
 - **HTTPS proxy injector** with per-run ECDSA P-256 CA written to a
@@ -53,5 +53,5 @@ Python and Node.js for each scenario.
   `gopkg.in/yaml.v3`, `google/martian/v3`. No new deps without
   explicit approval.
 
-[Unreleased]: https://github.com/faultkit/faultkit/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/faultkit/faultkit/releases/tag/v0.1.0
+[Unreleased]: https://github.com/faultkit-dev/faultkit/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/faultkit-dev/faultkit/releases/tag/v0.1.0

@@ -12,7 +12,7 @@ binary:
 
 ```bash
 VERSION=v0.1.0
-curl -sSL "https://github.com/faultkit/faultkit/releases/download/$VERSION/faultkit_${VERSION#v}_linux_amd64.tar.gz" \
+curl -sSL "https://github.com/faultkit-dev/faultkit/releases/download/$VERSION/faultkit_${VERSION#v}_linux_amd64.tar.gz" \
   | sudo tar -xz -C /usr/local/bin faultkit
 faultkit version
 ```
@@ -47,7 +47,7 @@ jobs:
       - name: Install faultkit
         run: |
           VERSION=v0.1.0
-          curl -sSL "https://github.com/faultkit/faultkit/releases/download/$VERSION/faultkit_${VERSION#v}_linux_amd64.tar.gz" \
+          curl -sSL "https://github.com/faultkit-dev/faultkit/releases/download/$VERSION/faultkit_${VERSION#v}_linux_amd64.tar.gz" \
             | sudo tar -xz -C /usr/local/bin faultkit
 
       - name: Sanity check

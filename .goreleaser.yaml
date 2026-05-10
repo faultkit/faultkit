@@ -41,9 +41,6 @@ snapshot:
   version_template: "{{ incpatch .Version }}-next"
 
 release:
-  github:
-    owner: faultkit
-    name: faultkit
   draft: false
   prerelease: auto
 
