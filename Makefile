@@ -45,9 +45,9 @@ lint:
 # Pinned tool versions — see .github/workflows/ci.yml for the same pins.
 # `@latest` would defeat the supply-chain hardening (GOTOOLCHAIN=local +
 # pinned Go) one layer up.
-GOSEC_VERSION       := v2.22.9
+GOSEC_VERSION       := v2.26.1
 NILAWAY_VERSION     := v0.0.0-20260318203545-ad240b12fb4c
-GOVULNCHECK_VERSION := v1.1.4
+GOVULNCHECK_VERSION := v1.3.0
 
 sec:
 	@if ! command -v gosec >/dev/null 2>&1; then \
