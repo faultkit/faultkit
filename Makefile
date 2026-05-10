@@ -47,7 +47,7 @@ lint:
 # pinned Go) one layer up.
 GOSEC_VERSION       := v2.22.9
 NILAWAY_VERSION     := v0.0.0-20260318203545-ad240b12fb4c
-GOVULNCHECK_VERSION := v1.3.0
+GOVULNCHECK_VERSION := v1.1.4
 
 sec:
 	@if ! command -v gosec >/dev/null 2>&1; then \
