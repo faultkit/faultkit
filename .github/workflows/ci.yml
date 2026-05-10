@@ -27,7 +27,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.24.0'
+          go-version: '1.25.10'
           cache: true
 
       - uses: actions/setup-python@v5
@@ -68,17 +68,16 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.24.0'
+          go-version: '1.25.10'
           cache: true
 
       - name: Install gosec + nilaway + govulncheck
         # Pinned. Updating any of these is a deliberate edit, not whatever
-        # `@latest` happened to be when CI fired. gosec >= v2.26 requires
-        # go 1.25; we're on 1.24.0 (per go.mod + GOTOOLCHAIN=local).
+        # `@latest` happened to be when CI fired.
         run: |
-          go install github.com/securego/gosec/v2/cmd/gosec@v2.22.9
+          go install github.com/securego/gosec/v2/cmd/gosec@v2.26.1
           go install go.uber.org/nilaway/cmd/nilaway@v0.0.0-20260318203545-ad240b12fb4c
-          go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+          go install golang.org/x/vuln/cmd/govulncheck@v1.3.0
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: Security checks
