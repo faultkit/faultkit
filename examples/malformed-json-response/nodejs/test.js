@@ -6,6 +6,11 @@ import { setGlobalDispatcher, ProxyAgent } from "undici";
 import { decideTool } from "./agent.js";
 import { serveInBackground } from "./mock-server.js";
 
+// Node's globalThis.fetch (undici) skips proxy for localhost by
+// default, so under faultkit run the local mock would be reached
+// directly without going through HTTPS_PROXY. Setting a global
+// ProxyAgent forces every request through it. In production
+// (api.openai.com over real network) this isn't needed.
 const proxy = process.env.HTTPS_PROXY ?? process.env.HTTP_PROXY;
 if (proxy) {
   setGlobalDispatcher(new ProxyAgent(proxy));

@@ -41,7 +41,11 @@ export function serveInBackground() {
     server.listen(0, "127.0.0.1", () => {
       resolve({
         port: server.address().port,
-        shutdown: () => new Promise((r) => server.close(r)),
+        shutdown: () =>
+          new Promise((r) => {
+            server.closeAllConnections();
+            server.close(r);
+          }),
       });
     });
   });
