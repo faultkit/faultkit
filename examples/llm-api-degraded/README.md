@@ -4,20 +4,22 @@ Tests the agent's ability to handle LLM provider rate-limit errors.
 
 ## The bug
 
-`agent.py` calls `chat.completions.create` and returns the assistant's
-content. There is no retry on `RateLimitError`, no backoff, no
-fallback. When the provider returns 429, the exception propagates and
-the agent fails the request.
+The `ask` agent (in `python/agent.py` and `nodejs/agent.js`) calls
+`chat.completions.create` and returns the assistant's content. There
+is no retry on `RateLimitError`, no backoff, no fallback. When the
+provider returns 429, the exception propagates and the agent fails
+the request.
 
 ## Demo
 
 ```bash
-pip install -r requirements.txt
+# Python
+(cd python && pip install -r requirements.txt && pytest .)               # passes
+faultkit run --config scenario.yaml -- python3 -m pytest python/         # fails
 
-pytest .                                                  # passes
-
-# Under faultkit (lands in v0.1 phases 2–5):
-faultkit run --config scenario.yaml -- pytest .           # fails
+# Node
+(cd nodejs && npm install && npm test)                                   # passes
+faultkit run --config scenario.yaml -- node --test nodejs/test.js        # fails
 ```
 
 The included `scenario.yaml` matches the local mock server (host

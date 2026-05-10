@@ -5,22 +5,26 @@ operation fails with `EACCES`.
 
 ## The bug
 
-`agent.py`'s `read_file_tool` uses a broad `except Exception` and
-returns an empty string on any failure. An `EACCES` from the kernel
-becomes `""` to the caller — indistinguishable from "the file exists
-but is empty". The agent's reasoning loop has no way to know the file
-read silently failed and proceeds with corrupt state.
+The `read_file_tool` / `readFileTool` agent (in `python/agent.py` and
+`nodejs/agent.js`) catches everything and returns an empty string on
+any failure. An `EACCES` from the kernel becomes `""` to the caller —
+indistinguishable from "the file exists but is empty". The agent's
+reasoning loop has no way to know the file read silently failed and
+proceeds with corrupt state.
 
 ## Demo
 
 ```bash
-pip install -r requirements.txt
+# Python
+(cd python && pip install -r requirements.txt && pytest .)                       # passes
+faultkit run --scenario tool-permission-denied -- python3 -m pytest python/      # fails
 
-pytest .                                                       # passes
-
-# Linux 5.8+ only:
-faultkit run --scenario tool-permission-denied -- pytest .     # fails
+# Node
+(cd nodejs && npm install && npm test)                                           # passes
+faultkit run --scenario tool-permission-denied -- node --test nodejs/test.js     # fails
 ```
+
+Linux 5.8+ for the eBPF injector.
 
 Under fault injection, faultkit's eBPF program rewrites `openat`
 syscall return values to `-EACCES`. The agent's tool returns `""`

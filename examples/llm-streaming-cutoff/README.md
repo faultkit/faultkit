@@ -4,39 +4,23 @@ Tests the agent's handling of streaming responses that drop mid-stream.
 
 ## The bug
 
-`agent.py`'s `stream_answer` consumes chunks from the stream until the
-iterator ends and returns the concatenated content. There is no check
-for `finish_reason`, no detection of a missing `[DONE]` sentinel. A
-network drop mid-stream produces a truncated string that the agent
-treats as final.
+The `streamAnswer` agent (in `python/agent.py` and `nodejs/agent.js`)
+consumes chunks from the stream until the iterator ends and returns
+the concatenated content. There is no check for `finish_reason`, no
+detection of a missing `[DONE]` sentinel. A network drop mid-stream
+produces a truncated string that the agent treats as final.
 
 ## Demo
 
 ```bash
-pip install -r requirements.txt
+# Python
+(cd python && pip install -r requirements.txt && pytest .)               # passes
+faultkit run --config scenario.yaml -- python3 -m pytest python/         # fails
 
-pytest .                                                # passes
-
-# Under faultkit (lands in v0.1 phases 2–5):
-faultkit run --config scenario.yaml -- pytest .         # fails
+# Node
+(cd nodejs && npm install && npm test)                                   # passes
+faultkit run --config scenario.yaml -- node --test nodejs/test.js        # fails
 ```
-
-> **Note:** `scenario.yaml` is intentionally not yet shipped here. The
-> `stream_cutoff_tokens` field needs to land in `pkg/faulttypes.Fault`
-> first (Phase 1 follow-up per V0.1_SPEC v2). Once it does, the
-> scenario looks like:
->
-> ```yaml
-> name: llm-streaming-cutoff-local
-> experiments:
->   - name: drop-after-3-tokens
->     fault:
->       stream_cutoff_tokens: 3
->     match:
->       host: 127.0.0.1*
->       path: /v1/*
->     probability: 1.0
-> ```
 
 Under fault injection, the proxy forwards N tokens then closes the
 connection without sending `[DONE]`. The agent's answer is truncated;
