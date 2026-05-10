@@ -8,6 +8,13 @@ on:
 permissions:
   contents: read
 
+# Pin toolchain to what setup-go installs. With GOTOOLCHAIN=auto (the
+# default) Go can silently download a newer toolchain if go.mod or any
+# dep declares a higher version — which would also bypass our exact
+# go-version pin. `local` forces "use what's installed, don't fetch."
+env:
+  GOTOOLCHAIN: local
+
 jobs:
   test:
     strategy:
@@ -20,7 +27,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: '1.24.0'
           cache: true
 
       - uses: actions/setup-python@v5
@@ -38,6 +45,9 @@ jobs:
             echo "$diff"
             exit 1
           fi
+
+      - name: go mod verify
+        run: go mod verify
 
       - name: go vet
         run: go vet ./...
@@ -58,13 +68,14 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: '1.24.0'
           cache: true
 
-      - name: Install gosec + nilaway
+      - name: Install gosec + nilaway + govulncheck
         run: |
           go install github.com/securego/gosec/v2/cmd/gosec@latest
           go install go.uber.org/nilaway/cmd/nilaway@latest
+          go install golang.org/x/vuln/cmd/govulncheck@latest
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: Security checks
