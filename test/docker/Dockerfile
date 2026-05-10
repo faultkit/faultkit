@@ -3,7 +3,7 @@
 # Reproducible runner for `make test-integration`. Mirrors the
 # toolchain matrix the example targets exercise: Go for faultkit
 # itself, python3+pytest+openai for the proxy integration test, and
-# Node 20 for the JS examples (added in a follow-up commit).
+# Node 20 for the JS examples.
 FROM golang:1.24-bookworm
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -13,11 +13,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-# Pin so image rebuilds don't drift. Keep in sync with what the
-# integration test expects in the host venv (/tmp/fk-venv on dev).
+# Pinned in test/docker/requirements.txt so .github/workflows/ci.yml
+# can install the same versions without a second pin site.
+COPY test/docker/requirements.txt /tmp/fk-test-requirements.txt
 RUN pip install --break-system-packages --no-cache-dir \
-        openai==2.36.0 \
-        pytest==8.3.4
+        -r /tmp/fk-test-requirements.txt
 
 WORKDIR /workspace
 COPY . .
