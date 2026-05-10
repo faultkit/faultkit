@@ -11,8 +11,7 @@ export function serveInBackground() {
       res.writeHead(404).end();
       return;
     }
-    let body = "";
-    req.on("data", (c) => (body += c));
+    req.on("data", () => {});
     req.on("end", () => {
       const payload = JSON.stringify({
         id: "chatcmpl-test",
@@ -37,7 +36,11 @@ export function serveInBackground() {
     server.listen(0, "127.0.0.1", () => {
       resolve({
         port: server.address().port,
-        shutdown: () => new Promise((r) => server.close(r)),
+        shutdown: () =>
+          new Promise((r) => {
+            server.closeAllConnections();
+            server.close(r);
+          }),
       });
     });
   });
