@@ -1,0 +1,6 @@
+bin/
+dist/
+**/__pycache__/
+**/.pytest_cache/
+**/node_modules/
+*.log

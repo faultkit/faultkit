@@ -85,8 +85,8 @@ re-litigated session to session.
 
 faultkit is split across two repos:
 
-- `github.com/faultkit-dev/faultkit` — public, Apache 2.0, this repo
-- `github.com/faultkit-dev/faultkit-pro` — private, commercial license, separate
+- `github.com/faultkit/faultkit` — public, Apache 2.0, this repo
+- `github.com/faultkit/faultkit-pro` — private, commercial license, separate
 
 **The OSS repo must contain zero Pro-aware code.** No Pro mentions in
 comments, no Pro feature flags, no `if isPro` branches, no stub commands
@@ -119,11 +119,39 @@ it's `internal`. Promotion to `pkg` requires explicit discussion.
 make build          # OSS build
 make test           # unit tests
 make lint           # vet + gofmt + golangci-lint
+make sec            # gosec + nilaway (phase-completion gate)
 make bpf            # compile BPF programs (Linux + clang required)
 ```
 
 Always run `make lint test` before declaring a task done. Not "I think it
 should pass" — actually run it.
+
+### Phase completion
+
+When finishing a phase from `docs/internal/V0.1_SPEC.md`, run `make sec`
+in addition to `make lint test`. Both `gosec` and `nilaway` must report
+zero findings before the phase counts as done.
+
+If a finding is genuinely a false positive:
+- gosec: suppress at the call site with
+  `// #nosec <RuleID> -- <reason>` and explain in the same line.
+- nilaway: prefer fixing the code (often a small refactor); reach for
+  `//nolint:nilaway` only when the false positive is rooted in the
+  stdlib and the fix would mean defensive code for an impossible case.
+
+Each suppression is a small documented decision. Don't blanket-suppress.
+
+`gosec` and `nilaway` are external tools, not in `go.mod`. Install once:
+
+```
+go install github.com/securego/gosec/v2/cmd/gosec@latest
+go install go.uber.org/nilaway/cmd/nilaway@latest
+```
+
+`nilaway` is invoked with `-include-pkgs=github.com/faultkit/faultkit`
+to filter out stdlib-rooted nil flows (e.g. `os.Args` is technically
+nilable but in practice never is). The Makefile target handles this
+automatically.
 
 ### Dependencies
 

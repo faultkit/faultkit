@@ -341,7 +341,7 @@ iteration.
 - One eBPF scenario: `flaky-network` (TCP recv `ECONNRESET`, Linux 5.8+)
 - YAML scenario loading (file + builtin registry)
 - `faultkit run` with target wrapping and exit code dispatch
-- `faultkit doctor` reporting available modes honestly
+- `faultkit check` reporting available modes honestly
 - Terminal + JSON reports
 - One worked example: openai-python agent + pytest
 - One CI integration: GitHub Actions workflow
