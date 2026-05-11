@@ -11,9 +11,9 @@ import (
 
 	"github.com/google/martian/v3"
 
-	"github.com/faultkit-dev/faultkit/internal/inject"
-	"github.com/faultkit-dev/faultkit/internal/inject/proxy/fixtures"
-	"github.com/faultkit-dev/faultkit/pkg/scenario"
+	"github.com/faultkit/faultkit/internal/inject"
+	"github.com/faultkit/faultkit/internal/inject/proxy/fixtures"
+	"github.com/faultkit/faultkit/pkg/scenario"
 )
 
 // syntheticHeader marks responses that faultkit synthesized rather

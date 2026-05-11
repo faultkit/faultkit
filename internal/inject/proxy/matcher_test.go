@@ -5,9 +5,9 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/faultkit-dev/faultkit/internal/inject/proxy"
-	"github.com/faultkit-dev/faultkit/pkg/faulttypes"
-	"github.com/faultkit-dev/faultkit/pkg/scenario"
+	"github.com/faultkit/faultkit/internal/inject/proxy"
+	"github.com/faultkit/faultkit/pkg/faulttypes"
+	"github.com/faultkit/faultkit/pkg/scenario"
 )
 
 func mustReq(t *testing.T, raw string) *http.Request {

@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/faultkit-dev/faultkit/pkg/faulttypes"
+	"github.com/faultkit/faultkit/pkg/faulttypes"
 )
 
 func TestFaultValidate(t *testing.T) {

@@ -4,7 +4,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/faultkit-dev/faultkit/internal/inject"
+	"github.com/faultkit/faultkit/internal/inject"
 )
 
 func TestAvailableModesIncludesBothKnown(t *testing.T) {

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/faultkit-dev/faultkit/internal/runner"
+	"github.com/faultkit/faultkit/internal/runner"
 )
 
 func skipIfWindows(t *testing.T) {

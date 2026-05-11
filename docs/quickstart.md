@@ -7,11 +7,11 @@ own code.
 
 ## Install
 
-Grab the binary for your platform from the [releases page](https://github.com/faultkit-dev/faultkit/releases),
+Grab the binary for your platform from the [releases page](https://github.com/faultkit/faultkit/releases),
 or build from source:
 
 ```bash
-git clone https://github.com/faultkit-dev/faultkit.git
+git clone https://github.com/faultkit/faultkit.git
 cd faultkit
 make build
 sudo install -m 0755 bin/faultkit /usr/local/bin/faultkit

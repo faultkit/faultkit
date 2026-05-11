@@ -3,7 +3,7 @@ package builtin
 import (
 	_ "embed"
 
-	"github.com/faultkit-dev/faultkit/pkg/scenario"
+	"github.com/faultkit/faultkit/pkg/scenario"
 )
 
 //go:embed llm_api_degraded.yaml

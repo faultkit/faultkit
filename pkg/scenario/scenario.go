@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/faultkit-dev/faultkit/pkg/faulttypes"
+	"github.com/faultkit/faultkit/pkg/faulttypes"
 )
 
 // Scenario is the top-level YAML object loaded from a scenario file.

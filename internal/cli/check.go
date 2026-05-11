@@ -8,7 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/faultkit-dev/faultkit/internal/inject"
+	"github.com/faultkit/faultkit/internal/inject"
 )
 
 func newCheckCmd() *cobra.Command {

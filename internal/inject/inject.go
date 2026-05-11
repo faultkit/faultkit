@@ -8,8 +8,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/faultkit-dev/faultkit/pkg/faulttypes"
-	"github.com/faultkit-dev/faultkit/pkg/scenario"
+	"github.com/faultkit/faultkit/pkg/faulttypes"
+	"github.com/faultkit/faultkit/pkg/scenario"
 )
 
 // Event reports a fault decision made during a run. Injectors emit one

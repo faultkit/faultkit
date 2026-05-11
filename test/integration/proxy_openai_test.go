@@ -15,7 +15,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/faultkit-dev/faultkit/internal/report"
+	"github.com/faultkit/faultkit/internal/report"
 )
 
 func repoRoot(t *testing.T) string {

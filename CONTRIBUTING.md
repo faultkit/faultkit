@@ -41,12 +41,12 @@ go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 
 ## Reporting bugs
 
-[Open an issue](https://github.com/faultkit-dev/faultkit/issues/new)
+[Open an issue](https://github.com/faultkit/faultkit/issues/new)
 with: faultkit version (`faultkit version`), platform + kernel
 (`uname -a`), exact command run, expected vs. observed behavior.
 The output of `faultkit check` helps a lot.
 
 ## Asking questions
 
-[GitHub Discussions](https://github.com/faultkit-dev/faultkit/discussions)
+[GitHub Discussions](https://github.com/faultkit/faultkit/discussions)
 is the right place. Don't open issues for usage questions.

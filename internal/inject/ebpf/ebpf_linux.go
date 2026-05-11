@@ -17,8 +17,8 @@ import (
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/cilium/ebpf/rlimit"
 
-	"github.com/faultkit-dev/faultkit/internal/inject"
-	"github.com/faultkit-dev/faultkit/pkg/scenario"
+	"github.com/faultkit/faultkit/internal/inject"
+	"github.com/faultkit/faultkit/pkg/scenario"
 )
 
 // prSetDumpable is the prctl(2) op number; not exported by the

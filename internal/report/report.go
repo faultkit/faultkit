@@ -5,7 +5,7 @@ package report
 import (
 	"time"
 
-	"github.com/faultkit-dev/faultkit/internal/inject"
+	"github.com/faultkit/faultkit/internal/inject"
 )
 
 // Summary is the user-facing record of a faultkit run.

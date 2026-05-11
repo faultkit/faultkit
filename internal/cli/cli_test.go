@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/faultkit-dev/faultkit/internal/cli"
+	"github.com/faultkit/faultkit/internal/cli"
 
-	_ "github.com/faultkit-dev/faultkit/internal/scenario/builtin"
+	_ "github.com/faultkit/faultkit/internal/scenario/builtin"
 )
 
 func runCLI(t *testing.T, args ...string) (int, string, string) {

@@ -4,7 +4,7 @@ VERSION ?= $(shell git describe --tags --dirty --always 2>/dev/null || echo "dev
 COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 DATE    ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 
-CLI_PKG := github.com/faultkit-dev/faultkit/internal/cli
+CLI_PKG := github.com/faultkit/faultkit/internal/cli
 LDFLAGS := -X $(CLI_PKG).version=$(VERSION) \
            -X $(CLI_PKG).commit=$(COMMIT) \
            -X $(CLI_PKG).date=$(DATE)
@@ -66,7 +66,7 @@ sec:
 		exit 1; \
 	fi
 	gosec ./...
-	nilaway -include-pkgs=github.com/faultkit-dev/faultkit ./...
+	nilaway -include-pkgs=github.com/faultkit/faultkit ./...
 	govulncheck ./...
 
 bpf: bpf/vmlinux.h

@@ -3,7 +3,7 @@ package builtin
 import (
 	_ "embed"
 
-	"github.com/faultkit-dev/faultkit/pkg/scenario"
+	"github.com/faultkit/faultkit/pkg/scenario"
 )
 
 //go:embed malformed_json_response.yaml

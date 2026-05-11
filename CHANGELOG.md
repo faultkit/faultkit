@@ -53,5 +53,5 @@ Python and Node.js for each scenario.
   `gopkg.in/yaml.v3`, `google/martian/v3`. No new deps without
   explicit approval.
 
-[Unreleased]: https://github.com/faultkit-dev/faultkit/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/faultkit-dev/faultkit/releases/tag/v0.1.0
+[Unreleased]: https://github.com/faultkit/faultkit/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/faultkit/faultkit/releases/tag/v0.1.0

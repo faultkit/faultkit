@@ -4,8 +4,8 @@ import (
 	"slices"
 	"testing"
 
-	_ "github.com/faultkit-dev/faultkit/internal/scenario/builtin"
-	"github.com/faultkit-dev/faultkit/pkg/scenario"
+	_ "github.com/faultkit/faultkit/internal/scenario/builtin"
+	"github.com/faultkit/faultkit/pkg/scenario"
 )
 
 func TestBuiltinsLoadable(t *testing.T) {

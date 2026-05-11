@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/faultkit-dev/faultkit/internal/inject/proxy"
+	"github.com/faultkit/faultkit/internal/inject/proxy"
 )
 
 func TestNewCAIsRoot(t *testing.T) {
