@@ -1,0 +1,12 @@
+name: malformed-json-response-local
+description: malformed-json-response scenario adapted for the local mock server.
+experiments:
+  - name: trailing-comma
+    fault:
+      http_status: 200
+      response_body: |
+        {"id":"chatcmpl-test","object":"chat.completion","model":"gpt-4o-mini","choices":[{"index":0,"message":{"role":"assistant","content":"{\"tool\":\"lookup_user\",\"args\":{\"id\":42},}"},"finish_reason":"stop"}]}
+    match:
+      host: 127.0.0.1*
+      path: /v1/*
+    probability: 1.0

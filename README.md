@@ -13,8 +13,8 @@
 
 </div>
 
-> **Status:** v0.1 — two scenarios end-to-end. See [roadmap](#roadmap) for what ships next.
-> **Platforms:** macOS, Linux, Windows for HTTP scenarios. Linux 5.8+ for syscall-level scenarios.
+> **Status:** v0.1 — five scenarios end-to-end. See [roadmap](#roadmap) for what ships next.
+> **Platforms:** macOS and Linux for HTTP scenarios. Linux 5.8+ for syscall-level scenarios.
 
 ---
 
@@ -69,7 +69,8 @@ faultkit ships scenarios mapped to real production failure modes. Each one targe
 | Scenario | What it does | v0.1 |
 |---|---|:---:|
 | `llm-api-degraded` | Inject 429 / 503 / timeout into requests to OpenAI, Anthropic, Bedrock, Vertex, etc. | ✅ |
-| `llm-streaming-cutoff` | Drop the SSE connection mid-stream after N tokens | 🛣️ |
+| `malformed-json-response` | LLM returns 200 OK with syntactically invalid JSON in the body | ✅ |
+| `llm-streaming-cutoff` | Drop the SSE connection mid-stream after N tokens | ✅ |
 | `context-window-squeeze` | Silently truncate large prompts at the SDK boundary | 🛣️ |
 | `gateway-timeout` | LiteLLM / Portkey / custom gateway returns slow or hangs | 🛣️ |
 
@@ -84,8 +85,8 @@ faultkit ships scenarios mapped to real production failure modes. Each one targe
 
 | Scenario | What it does | v0.1 |
 |---|---|:---:|
+| `tool-permission-denied` | `EACCES` / `EPERM` on the agent's file or path access | ✅ |
 | `tool-call-flaky` | Subprocess gets `SIGPIPE`, OOM-killed, or returns truncated stdout | 🛣️ |
-| `tool-permission-denied` | `EACCES` / `EPERM` on the agent's file or path access | 🛣️ |
 | `tool-slow` | Subprocess hangs for N seconds, exposes timeout-handling bugs | 🛣️ |
 
 ### Backend classics
@@ -100,22 +101,6 @@ faultkit ships scenarios mapped to real production failure modes. Each one targe
 ✅ = working in v0.1 today · 🛣️ = on the v0.2 / v0.3 roadmap
 
 All scenarios are free and open source. Forever.
-
----
-
-## Why this exists when other chaos tools exist
-
-| Tool | Setup | AI-agent scenarios | TLS-encrypted traffic | Cost |
-|---|---|---|---|---|
-| **faultkit** | one binary | first-class | yes | free |
-| Chaos Mesh | Kubernetes + CRDs + platform team | none | no | free |
-| Gremlin | enterprise contract | none | platform-level | $50k+/yr |
-| Toxiproxy | one binary | none (TCP-level only) | proxy-only | free |
-| App-layer mocks | code change | DIY per project | n/a | tests the mock |
-
-The chaos tools that exist are built for the *previous* era — Kubernetes-native infra, TCP-level proxies, enterprise procurement. None were designed when "the most fragile code most teams ship" meant a chain of LLM calls and tool subprocesses.
-
-faultkit is built for that.
 
 ---
 
@@ -143,7 +128,8 @@ Write a YAML file. faultkit handles the rest.
 
 ```yaml
 # nightmare.yaml
-target: ai-orchestrator
+name: nightmare
+description: Multiple failures happening simultaneously.
 
 experiments:
   - name: "OpenAI rate-limited mid-reasoning"
@@ -155,20 +141,19 @@ experiments:
       host: api.openai.com
     probability: 0.2
 
-  - name: "Postgres connection drops under load"
+  - name: "Network drops on backend recv"
     fault:
       errno: ECONNRESET
     match:
       syscall: recvmsg
-      port: 5432
     probability: 0.05
 
-  - name: "Disk fills up halfway through the run"
+  - name: "Tool can't read its config"
     fault:
-      errno: ENOSPC
+      errno: EACCES
     match:
-      syscall: write
-      after_bytes: 100_000_000
+      syscall: openat
+    probability: 0.05
 ```
 
 Run it:
@@ -194,11 +179,11 @@ curl -sSL https://faultkit.dev/install | sh
 
 ```bash
 # Linux amd64
-wget https://github.com/faultkit-dev/faultkit/releases/latest/download/faultkit-linux-amd64
+wget https://github.com/faultkit/faultkit/releases/latest/download/faultkit-linux-amd64
 chmod +x faultkit-linux-amd64 && sudo mv faultkit-linux-amd64 /usr/local/bin/faultkit
 
 # macOS arm64 (Apple Silicon)
-wget https://github.com/faultkit-dev/faultkit/releases/latest/download/faultkit-darwin-arm64
+wget https://github.com/faultkit/faultkit/releases/latest/download/faultkit-darwin-arm64
 chmod +x faultkit-darwin-arm64 && sudo mv faultkit-darwin-arm64 /usr/local/bin/faultkit
 ```
 
@@ -207,15 +192,50 @@ chmod +x faultkit-darwin-arm64 && sudo mv faultkit-darwin-arm64 /usr/local/bin/f
 ```bash
 yay -S faultkit              # Arch (AUR)
 nix-env -iA nixpkgs.faultkit # Nix
-go install github.com/faultkit-dev/faultkit/cmd/faultkit@latest
+go install github.com/faultkit/faultkit/cmd/faultkit@latest
 ```
 
 **Requirements**
 
-- Proxy-mode scenarios: any platform with a working Go runtime. No privileges.
-- eBPF-mode scenarios: Linux 5.8+ with BTF enabled, `CAP_BPF` + `CAP_NET_ADMIN` (or root).
+- **Proxy-mode scenarios**: any platform with a working Go runtime. No privileges.
+- **eBPF-mode scenarios**: Linux 5.8+ with BTF enabled. The simplest path is
+  `sudo`:
 
-Run `faultkit doctor` after install — it tells you which modes are available on your machine and why.
+  ```
+  sudo faultkit run --scenario flaky-network -- ./your-target
+  ```
+
+  The file-capabilities path also works and avoids running the target
+  as root, but it requires one extra capability for cilium/ebpf to
+  detect the kernel version:
+
+  ```
+  sudo setcap 'cap_bpf,cap_net_admin,cap_perfmon,cap_sys_ptrace=+ep' /usr/local/bin/faultkit
+  ```
+
+  - `cap_bpf` + `cap_net_admin` — load BPF programs and attach the kprobe.
+  - `cap_perfmon` — kernel requires it for tracing-class BPF programs (kprobes, tracepoints).
+  - `cap_sys_ptrace` — see the dumpable note below.
+
+  When running under file caps, faultkit calls `prctl(PR_SET_DUMPABLE, 1)`
+  on Linux so cilium/ebpf can read `/proc/self/mem`. The trade-off is
+  that other processes running as your user can ptrace-attach to
+  faultkit while it's running. faultkit is a developer tool — that's
+  acceptable on a developer machine or single-tenant CI runner. If
+  it's not acceptable in your environment, use `sudo` instead.
+
+**Process-tree propagation works through wrappers.** faultkit registers
+the PID it forks; descendants inherit the registration automatically,
+so `sh -c '... curl ...'` and similar wrappers fire faults on the
+inner process the same as a direct invocation.
+
+**Heads-up on Go targets**: Go's `net/http` reads via `read()` rather
+than `recvmsg()`/`recvfrom()`. faultkit's kprobes only cover the
+latter two, so libc-based clients (most C/Python/Node tooling) get
+faulted but Go HTTP targets don't. Use the proxy scenarios for Go
+targets.
+
+Run `faultkit check` after install — it tells you which modes are available on your machine and why.
 
 ---
 
@@ -246,17 +266,17 @@ More CI recipes: [examples/](./examples/).
 
 **Shipped (v0.1)**
 
-- HTTPS proxy injector with `llm-api-degraded`
-- eBPF injector with `flaky-network`
+- HTTPS proxy injector with `llm-api-degraded`, `malformed-json-response`, `llm-streaming-cutoff`
+- eBPF injector with `flaky-network`, `tool-permission-denied`
 - YAML scenario loading
-- Auto-mode selection, `faultkit doctor`, distinct exit codes
+- Auto-mode selection, `faultkit check`, distinct exit codes
 - GitHub Actions integration
 
 **Next (v0.2)**
 
 - LD_PRELOAD / DYLD shim mode
-- Tool-call scenarios (`tool-call-flaky`, `tool-permission-denied`)
-- Streaming-aware proxy (`llm-streaming-cutoff`, `rag-corruption`)
+- More tool-call scenarios (`tool-call-flaky`, `tool-slow`)
+- RAG / embeddings scenarios (`rag-corruption`, `embeddings-degraded`)
 - More backend scenarios (`disk-full`, `slow-dns`, `fd-exhaustion`)
 
 **Later (v0.3+)**
@@ -288,16 +308,10 @@ Interested? [Get on the list →](https://faultkit.dev/pro)
 Contributions welcome. The project uses an Apache-style individual CLA — the bot will walk you through it on your first PR (~30 seconds, one-time).
 
 - Write a scenario → [scenarios guide](https://faultkit.dev/docs/scenarios)
-- Report a bug → [open an issue](https://github.com/faultkit-dev/faultkit/issues/new)
-- Ask a question → [Discussions](https://github.com/faultkit-dev/faultkit/discussions)
+- Report a bug → [open an issue](https://github.com/faultkit/faultkit/issues/new)
+- Ask a question → [Discussions](https://github.com/faultkit/faultkit/discussions)
 
-Good first issues are tagged on the [issue tracker](https://github.com/faultkit-dev/faultkit/issues?q=label%3A%22good+first+issue%22).
-
----
-
-## Built by the author of [kntrl.dev](https://kntrl.dev)
-
-Production eBPF tooling, shipped for years. faultkit is built on the same foundations that power kntrl's CI/CD runtime security agent.
+Good first issues are tagged on the [issue tracker](https://github.com/faultkit/faultkit/issues?q=label%3A%22good+first+issue%22).
 
 ---
 

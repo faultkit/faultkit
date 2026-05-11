@@ -1,0 +1,23 @@
+run:
+  timeout: 5m
+
+linters:
+  disable-all: true
+  enable:
+    - errcheck
+    - gofmt
+    - goimports
+    - gosec
+    - govet
+    - revive
+    - staticcheck
+
+linters-settings:
+  goimports:
+    local-prefixes: github.com/faultkit/faultkit
+
+issues:
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - gosec

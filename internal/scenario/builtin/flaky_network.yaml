@@ -1,0 +1,12 @@
+name: flaky-network
+description: Inject ECONNRESET on TCP recv, simulating flaky network conditions.
+requires:
+  platform: linux
+  kernel_min: "5.8"
+experiments:
+  - name: tcp-recv-reset
+    fault:
+      errno: ECONNRESET
+    match:
+      syscall: recvmsg
+    probability: 0.1
