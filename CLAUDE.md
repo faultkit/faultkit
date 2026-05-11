@@ -85,8 +85,8 @@ re-litigated session to session.
 
 faultkit is split across two repos:
 
-- `github.com/faultkit-dev/faultkit` — public, Apache 2.0, this repo
-- `github.com/faultkit-dev/faultkit-pro` — private, commercial license, separate
+- `github.com/faultkit/faultkit` — public, Apache 2.0, this repo
+- `github.com/faultkit/faultkit-pro` — private, commercial license, separate
 
 **The OSS repo must contain zero Pro-aware code.** No Pro mentions in
 comments, no Pro feature flags, no `if isPro` branches, no stub commands
@@ -148,7 +148,7 @@ go install github.com/securego/gosec/v2/cmd/gosec@latest
 go install go.uber.org/nilaway/cmd/nilaway@latest
 ```
 
-`nilaway` is invoked with `-include-pkgs=github.com/faultkit-dev/faultkit`
+`nilaway` is invoked with `-include-pkgs=github.com/faultkit/faultkit`
 to filter out stdlib-rooted nil flows (e.g. `os.Args` is technically
 nilable but in practice never is). The Makefile target handles this
 automatically.

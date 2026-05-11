@@ -179,11 +179,11 @@ curl -sSL https://faultkit.dev/install | sh
 
 ```bash
 # Linux amd64
-wget https://github.com/faultkit-dev/faultkit/releases/latest/download/faultkit-linux-amd64
+wget https://github.com/faultkit/faultkit/releases/latest/download/faultkit-linux-amd64
 chmod +x faultkit-linux-amd64 && sudo mv faultkit-linux-amd64 /usr/local/bin/faultkit
 
 # macOS arm64 (Apple Silicon)
-wget https://github.com/faultkit-dev/faultkit/releases/latest/download/faultkit-darwin-arm64
+wget https://github.com/faultkit/faultkit/releases/latest/download/faultkit-darwin-arm64
 chmod +x faultkit-darwin-arm64 && sudo mv faultkit-darwin-arm64 /usr/local/bin/faultkit
 ```
 
@@ -192,7 +192,7 @@ chmod +x faultkit-darwin-arm64 && sudo mv faultkit-darwin-arm64 /usr/local/bin/f
 ```bash
 yay -S faultkit              # Arch (AUR)
 nix-env -iA nixpkgs.faultkit # Nix
-go install github.com/faultkit-dev/faultkit/cmd/faultkit@latest
+go install github.com/faultkit/faultkit/cmd/faultkit@latest
 ```
 
 **Requirements**
@@ -308,10 +308,10 @@ Interested? [Get on the list →](https://faultkit.dev/pro)
 Contributions welcome. The project uses an Apache-style individual CLA — the bot will walk you through it on your first PR (~30 seconds, one-time).
 
 - Write a scenario → [scenarios guide](https://faultkit.dev/docs/scenarios)
-- Report a bug → [open an issue](https://github.com/faultkit-dev/faultkit/issues/new)
-- Ask a question → [Discussions](https://github.com/faultkit-dev/faultkit/discussions)
+- Report a bug → [open an issue](https://github.com/faultkit/faultkit/issues/new)
+- Ask a question → [Discussions](https://github.com/faultkit/faultkit/discussions)
 
-Good first issues are tagged on the [issue tracker](https://github.com/faultkit-dev/faultkit/issues?q=label%3A%22good+first+issue%22).
+Good first issues are tagged on the [issue tracker](https://github.com/faultkit/faultkit/issues?q=label%3A%22good+first+issue%22).
 
 ---
 

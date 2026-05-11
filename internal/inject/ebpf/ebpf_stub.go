@@ -6,8 +6,8 @@ import (
 	"context"
 	"errors"
 
-	"github.com/faultkit-dev/faultkit/internal/inject"
-	"github.com/faultkit-dev/faultkit/pkg/scenario"
+	"github.com/faultkit/faultkit/internal/inject"
+	"github.com/faultkit/faultkit/pkg/scenario"
 )
 
 // ErrUnsupported is returned by Start when faultkit is built for a

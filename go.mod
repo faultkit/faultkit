@@ -1,4 +1,4 @@
-module github.com/faultkit-dev/faultkit
+module github.com/faultkit/faultkit
 
 go 1.24.0
 

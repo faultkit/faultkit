@@ -4,9 +4,9 @@ import (
 	"math/rand/v2"
 	"testing"
 
-	"github.com/faultkit-dev/faultkit/internal/inject/proxy"
-	"github.com/faultkit-dev/faultkit/pkg/faulttypes"
-	"github.com/faultkit-dev/faultkit/pkg/scenario"
+	"github.com/faultkit/faultkit/internal/inject/proxy"
+	"github.com/faultkit/faultkit/pkg/faulttypes"
+	"github.com/faultkit/faultkit/pkg/scenario"
 )
 
 func httpScenario(probability float64) *scenario.Scenario {

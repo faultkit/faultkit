@@ -3,7 +3,7 @@ package proxy
 import (
 	"net/http"
 
-	"github.com/faultkit-dev/faultkit/pkg/scenario"
+	"github.com/faultkit/faultkit/pkg/scenario"
 )
 
 // Matcher selects an experiment for an HTTP request based on host and

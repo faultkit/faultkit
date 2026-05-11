@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/faultkit-dev/faultkit/pkg/faulttypes"
+	"github.com/faultkit/faultkit/pkg/faulttypes"
 )
 
 // Synthetic carries a fully-formed synthetic HTTP response.

@@ -10,8 +10,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/faultkit-dev/faultkit/pkg/faulttypes"
-	"github.com/faultkit-dev/faultkit/pkg/scenario"
+	"github.com/faultkit/faultkit/pkg/faulttypes"
+	"github.com/faultkit/faultkit/pkg/scenario"
 )
 
 // e2e wires the standard end-to-end proxy harness: a TLS upstream

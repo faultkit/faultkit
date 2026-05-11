@@ -20,9 +20,9 @@ builds:
       - arm64
     ldflags:
       - -s -w
-      - -X github.com/faultkit-dev/faultkit/internal/cli.version={{.Version}}
-      - -X github.com/faultkit-dev/faultkit/internal/cli.commit={{.ShortCommit}}
-      - -X github.com/faultkit-dev/faultkit/internal/cli.date={{.Date}}
+      - -X github.com/faultkit/faultkit/internal/cli.version={{.Version}}
+      - -X github.com/faultkit/faultkit/internal/cli.commit={{.ShortCommit}}
+      - -X github.com/faultkit/faultkit/internal/cli.date={{.Date}}
 
 archives:
   - id: faultkit

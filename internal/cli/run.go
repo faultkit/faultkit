@@ -11,12 +11,12 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/faultkit-dev/faultkit/internal/inject"
-	"github.com/faultkit-dev/faultkit/internal/inject/ebpf"
-	"github.com/faultkit-dev/faultkit/internal/inject/proxy"
-	"github.com/faultkit-dev/faultkit/internal/report"
-	"github.com/faultkit-dev/faultkit/internal/runner"
-	"github.com/faultkit-dev/faultkit/pkg/scenario"
+	"github.com/faultkit/faultkit/internal/inject"
+	"github.com/faultkit/faultkit/internal/inject/ebpf"
+	"github.com/faultkit/faultkit/internal/inject/proxy"
+	"github.com/faultkit/faultkit/internal/report"
+	"github.com/faultkit/faultkit/internal/runner"
+	"github.com/faultkit/faultkit/pkg/scenario"
 )
 
 const (

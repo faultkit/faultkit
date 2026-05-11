@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/faultkit-dev/faultkit/internal/inject"
-	"github.com/faultkit-dev/faultkit/internal/report"
+	"github.com/faultkit/faultkit/internal/inject"
+	"github.com/faultkit/faultkit/internal/report"
 )
 
 func sample() report.Summary {

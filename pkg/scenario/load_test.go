@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/faultkit-dev/faultkit/pkg/faulttypes"
-	"github.com/faultkit-dev/faultkit/pkg/scenario"
+	"github.com/faultkit/faultkit/pkg/faulttypes"
+	"github.com/faultkit/faultkit/pkg/scenario"
 )
 
 const validHTTPYAML = `

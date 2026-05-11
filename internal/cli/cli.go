@@ -10,7 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/faultkit-dev/faultkit/internal/runner"
+	"github.com/faultkit/faultkit/internal/runner"
 )
 
 // Exit codes returned by Execute. CI scripts branch on these; do not renumber.

@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/faultkit-dev/faultkit/internal/inject/proxy/fixtures"
-	"github.com/faultkit-dev/faultkit/pkg/faulttypes"
+	"github.com/faultkit/faultkit/internal/inject/proxy/fixtures"
+	"github.com/faultkit/faultkit/pkg/faulttypes"
 )
 
 type anthropicEnvelope struct {
