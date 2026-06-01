@@ -1,0 +1,12 @@
+name: flaky-network-deterministic
+description: ECONNRESET on every recv, for the eBPF integration test (probability 1.0).
+requires:
+  platform: linux
+  kernel_min: "5.8"
+experiments:
+  - name: tcp-recv-reset
+    fault:
+      errno: ECONNRESET
+    match:
+      syscall: recvmsg
+    probability: 1.0
