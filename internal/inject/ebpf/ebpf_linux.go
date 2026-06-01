@@ -46,6 +46,7 @@ type Injector struct {
 	scenarioName           string
 	syscallName            string
 	events                 chan inject.Event
+	vlog                   inject.Logf
 
 	readerDone chan struct{}
 
@@ -57,6 +58,9 @@ type Injector struct {
 func New() *Injector {
 	return &Injector{events: make(chan inject.Event, 256)}
 }
+
+// SetVerbose installs a verbose logger. Implements inject.VerboseAware.
+func (i *Injector) SetVerbose(vlog inject.Logf) { i.vlog = vlog }
 
 // Start loads the BPF program matching the scenario and attaches its
 // kprobes. Returns an empty env slice — eBPF mode needs no env vars.
@@ -114,12 +118,18 @@ func (i *Injector) loadFlakyNetwork() error {
 		return err
 	}
 
-	return i.attachKprobes([]kprobeTarget{
+	if err := i.attachKprobes([]kprobeTarget{
 		{"__x64_sys_recvmsg", objs.FlakyNetworkRecvmsg},
 		{"__x64_sys_recvfrom", objs.FlakyNetworkRecvfrom},
 		{"wake_up_new_task", objs.FlakyNetworkTrackFork},
 		{"do_exit", objs.FlakyNetworkTrackExit},
-	})
+	}); err != nil {
+		return err
+	}
+	if i.vlog != nil {
+		i.vlog("ebpf: loaded flaky-network; attached kprobes recvmsg, recvfrom, fork(wake_up_new_task), exit(do_exit)")
+	}
+	return nil
 }
 
 func (i *Injector) loadToolPermDenied() error {
@@ -133,11 +143,17 @@ func (i *Injector) loadToolPermDenied() error {
 		return err
 	}
 
-	return i.attachKprobes([]kprobeTarget{
+	if err := i.attachKprobes([]kprobeTarget{
 		{"__x64_sys_openat", objs.ToolPermDeniedOpenat},
 		{"wake_up_new_task", objs.ToolPermDeniedTrackFork},
 		{"do_exit", objs.ToolPermDeniedTrackExit},
-	})
+	}); err != nil {
+		return err
+	}
+	if i.vlog != nil {
+		i.vlog("ebpf: loaded tool-permission-denied; attached kprobes openat, fork(wake_up_new_task), exit(do_exit)")
+	}
+	return nil
 }
 
 func (i *Injector) openReader(m *cebpf.Map) error {
@@ -185,6 +201,9 @@ func (i *Injector) SetTargetPID(pid int) error {
 	val := i.probabilityPerThousand
 	if err := i.faultConfig.Update(&key, &val, cebpf.UpdateAny); err != nil {
 		return fmt.Errorf("ebpf: configure pid %d: %w", pid, err)
+	}
+	if i.vlog != nil {
+		i.vlog("ebpf: registered target pid %d (prob=%d/1000)", pid, val)
 	}
 	return nil
 }

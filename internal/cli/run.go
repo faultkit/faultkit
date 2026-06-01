@@ -42,7 +42,7 @@ func newRunCmd() *cobra.Command {
 	cmd.Flags().StringVar(&opts.configPath, "config", "", "scenario YAML file")
 	cmd.Flags().StringVar(&opts.mode, "mode", modeAuto, "injection mode: auto, proxy, ebpf")
 	cmd.Flags().StringVar(&opts.reportPath, "report", "", "write JSON report to path")
-	cmd.Flags().BoolVar(&opts.verbose, "verbose", false, "log every fault decision")
+	cmd.Flags().BoolVar(&opts.verbose, "verbose", false, "log injector activity and each fault as it fires")
 	return cmd
 }
 
@@ -60,6 +60,13 @@ func runFaultkit(parentCtx context.Context, o runOpts) error {
 	ctx, stopSignals := signal.NotifyContext(parentCtx, os.Interrupt, syscall.SIGTERM)
 	defer stopSignals()
 
+	var vlog inject.Logf
+	if o.verbose {
+		vlog = func(format string, args ...any) {
+			fmt.Fprintf(o.stderr, "[faultkit] "+format+"\n", args...)
+		}
+	}
+
 	s, err := loadScenario(o)
 	if err != nil {
 		return err
@@ -71,6 +78,16 @@ func runFaultkit(parentCtx context.Context, o runOpts) error {
 	inj, err := pickInjector(s, o.mode)
 	if err != nil {
 		return err
+	}
+	if vlog != nil {
+		if va, ok := inj.(inject.VerboseAware); ok {
+			va.SetVerbose(vlog)
+		}
+		effMode := o.mode
+		if effMode == modeAuto {
+			effMode = scenarioMode(s)
+		}
+		vlog("mode=%s scenario=%s", effMode, s.Name)
 	}
 
 	env, err := inj.Start(ctx, s)
@@ -107,6 +124,12 @@ func runFaultkit(parentCtx context.Context, o runOpts) error {
 	}
 
 	events := <-drainDone
+
+	if vlog != nil {
+		for _, ev := range events {
+			vlog("%s", verboseEventLine(ev))
+		}
+	}
 
 	targetExit := 0
 	if result != nil {
@@ -209,6 +232,27 @@ func pickInjector(s *scenario.Scenario, mode string) (inject.Injector, error) {
 	default:
 		return nil, UsageErrorf("--mode must be %s, %s, or %s; got %q", modeAuto, modeProxy, modeEBPF, mode)
 	}
+}
+
+// verboseEventLine renders one fault event for --verbose output, picking
+// the HTTP or syscall fields depending on which injector produced it.
+func verboseEventLine(ev inject.Event) string {
+	target := fmt.Sprintf("host=%s", ev.Host)
+	if ev.Path != "" {
+		target = fmt.Sprintf("host=%s path=%s", ev.Host, ev.Path)
+	}
+	if ev.Syscall != "" {
+		target = fmt.Sprintf("syscall=%s pid=%d", ev.Syscall, ev.PID)
+	}
+	verb := "fault fired"
+	if !ev.Fired {
+		verb = "fault event"
+	}
+	line := fmt.Sprintf("%s: experiment=%q %s", verb, ev.Experiment, target)
+	if ev.Err != "" {
+		line += fmt.Sprintf(" err=%q", ev.Err)
+	}
+	return line
 }
 
 func drainEvents(ch <-chan inject.Event) []inject.Event {
