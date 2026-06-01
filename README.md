@@ -53,7 +53,7 @@ target exit:  1 (FAIL)
   tests/agent/test_planning.py::test_recovers_from_rate_limit  FAILED
   tests/agent/test_research.py::test_handles_partial_context   FAILED
 
-run with --verbose to see the injected responses
+run with --verbose to see each fault as it fires
 ```
 
 Two failing tests you didn't have yesterday. Two production bugs you won't have tomorrow.
@@ -200,9 +200,11 @@ go install github.com/faultkit/faultkit/cmd/faultkit@latest
 **Requirements**
 
 - **Proxy-mode scenarios**: any platform with a working Go runtime. No privileges.
-- **eBPF-mode scenarios**: Linux 5.8+ on x86-64, with BTF enabled. (The BPF
-  programs hook `__x64_sys_*` kprobes; arm64 isn't supported yet.) The
-  simplest path is `sudo`:
+- **eBPF-mode scenarios**: Linux 5.8+ on x86-64, with BTF and
+  `CONFIG_BPF_KPROBE_OVERRIDE` enabled. (The BPF programs hook `__x64_sys_*`
+  kprobes and use `bpf_override_return`, which needs that kernel config —
+  most distro kernels have it, some minimal/cloud kernels don't. arm64
+  isn't supported yet.) The simplest path is `sudo`:
 
   ```
   sudo faultkit run --scenario flaky-network -- ./your-target
