@@ -5,6 +5,7 @@ package inject
 import (
 	"fmt"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 )
@@ -24,6 +25,13 @@ func availableModes() []ModeReport {
 }
 
 func ebpfModeReport() ModeReport {
+	// The BPF programs hook x86-64 syscall kprobes (__x64_sys_*) and are
+	// built with __TARGET_ARCH_x86. On other arches the kprobe symbols
+	// don't exist, so attach fails at run time — report it up front
+	// instead of letting `check` claim eBPF works.
+	if runtime.GOARCH != "amd64" {
+		return ModeReport{Mode: ModeEBPF, Available: false, Reason: "needs x86-64 (programs hook __x64_sys_* kprobes)"}
+	}
 	if v := kernelRelease(); v != "" && !kernelAtLeast(v, 5, 8) {
 		return ModeReport{Mode: ModeEBPF, Available: false, Reason: fmt.Sprintf("kernel %s < 5.8", v)}
 	}
@@ -73,6 +81,14 @@ func kernelAtLeast(version string, wantMajor, wantMinor int) bool {
 
 func notDigit(r rune) bool { return r < '0' || r > '9' }
 
+// hasBPFCaps reports whether the effective capability set has the three
+// caps eBPF mode needs. PR_SET_DUMPABLE (see ebpf_linux.go) covers the
+// /proc/self/mem read at load, so CAP_SYS_PTRACE is intentionally not
+// required here.
+//
+// TODO: the README's `setcap` example still lists cap_sys_ptrace.
+// Confirm on a real eBPF box that these three caps alone are sufficient,
+// then drop cap_sys_ptrace from the docs (or document why it's needed).
 func hasBPFCaps() bool {
 	data, err := os.ReadFile("/proc/self/status")
 	if err != nil {
