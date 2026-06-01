@@ -29,10 +29,14 @@ type Injector struct {
 	ca     *CA
 	server *Server
 	events chan inject.Event
+	vlog   inject.Logf
 
 	stopOnce sync.Once
 	stopErr  error
 }
+
+// SetVerbose installs a verbose logger. Implements inject.VerboseAware.
+func (i *Injector) SetVerbose(vlog inject.Logf) { i.vlog = vlog }
 
 // New returns a new, unstarted Injector.
 func New() *Injector {
@@ -75,6 +79,10 @@ func (i *Injector) Start(_ context.Context, s *scenario.Scenario) ([]string, err
 		return nil, err
 	}
 	i.server = server
+
+	if i.vlog != nil {
+		i.vlog("proxy: listening on %s; target trusts per-run CA at %s", addr, pemPath)
+	}
 
 	url := fmt.Sprintf("http://%s", addr)
 	env := make([]string, 0, len(proxyURLEnvKeys)+len(caPathEnvKeys))

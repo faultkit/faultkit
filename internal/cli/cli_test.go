@@ -155,6 +155,25 @@ func TestCheckPrintsPlatformAndModes(t *testing.T) {
 	}
 }
 
+func TestRunVerboseLogsInjectorActivity(t *testing.T) {
+	code, _, stderr := runCLI(t, "run", "--scenario", "llm-api-degraded", "--verbose", "--", "true")
+	if code != cli.ExitFaultNotFired {
+		t.Fatalf("code=%d, want %d (stderr=%q)", code, cli.ExitFaultNotFired, stderr)
+	}
+	for _, want := range []string{"[faultkit]", "mode=proxy", "scenario=llm-api-degraded"} {
+		if !strings.Contains(stderr, want) {
+			t.Errorf("verbose stderr missing %q: %s", want, stderr)
+		}
+	}
+}
+
+func TestRunWithoutVerboseIsQuiet(t *testing.T) {
+	_, _, stderr := runCLI(t, "run", "--scenario", "llm-api-degraded", "--", "true")
+	if strings.Contains(stderr, "[faultkit]") {
+		t.Errorf("non-verbose run should not emit [faultkit] lines: %s", stderr)
+	}
+}
+
 func TestRunModeProxyOnSyscallScenarioRejected(t *testing.T) {
 	code, _, stderr := runCLI(t, "run",
 		"--scenario", "flaky-network",
