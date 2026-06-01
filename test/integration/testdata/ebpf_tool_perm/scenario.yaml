@@ -1,0 +1,12 @@
+name: tool-permission-denied-deterministic
+description: EACCES on every openat, for the eBPF integration test (probability 1.0).
+requires:
+  platform: linux
+  kernel_min: "5.8"
+experiments:
+  - name: openat-eacces
+    fault:
+      errno: EACCES
+    match:
+      syscall: openat
+    probability: 1.0
