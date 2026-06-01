@@ -14,7 +14,7 @@
 </div>
 
 > **Status:** v0.1 — five scenarios end-to-end. See [roadmap](#roadmap) for what ships next.
-> **Platforms:** macOS and Linux for HTTP scenarios. Linux 5.8+ for syscall-level scenarios.
+> **Platforms:** macOS and Linux for HTTP scenarios. Linux 5.8+ (x86-64) for syscall-level scenarios.
 
 ---
 
@@ -110,9 +110,9 @@ You don't need to know this to use faultkit. But if you're going to run it in yo
 
 faultkit picks the right injection mechanism for each scenario automatically. Three are supported:
 
-**HTTPS proxy.** For LLM / RAG / gateway scenarios. faultkit runs an in-process MITM proxy, terminates TLS with a CA it provisions for the target process only, and rewrites HTTP responses (status codes, bodies, streaming). The target sees a real HTTP 429 from a real TLS connection, because that's what it gets. Cross-platform, no privileges required.
+**HTTPS proxy.** For LLM / RAG / gateway scenarios. faultkit runs an in-process MITM proxy, terminates TLS with a CA it provisions for the target process only, and rewrites HTTP responses (status codes, bodies, streaming). The target sees a real HTTP 429 from a real TLS connection, because that's what it gets. Connections are served over HTTP/1.1 (HTTP/2 isn't proxied yet), which is transparent to virtually every HTTP client. Cross-platform, no privileges required.
 
-**eBPF, Linux 5.8+.** For syscall-level scenarios — backend chaos, tool-call subprocess failures, file permission denials. faultkit loads small eBPF programs into the kernel that hook the relevant tracepoints (`recvmsg`, `openat`, `write`, etc.) and use `bpf_override_return` to rewrite syscall return values for processes inside the target's PID tree. The target sees a real `ECONNRESET`, a real `EACCES`, a real short `read()`, because that's what the kernel returned.
+**eBPF, Linux 5.8+.** For syscall-level scenarios — backend chaos, tool-call subprocess failures, file permission denials. faultkit attaches small eBPF programs to the relevant syscall kprobes (`recvmsg`, `recvfrom`, `openat`) and uses `bpf_override_return` to rewrite syscall return values for processes inside the target's PID tree. The target sees a real `ECONNRESET`, a real `EACCES`, because that's what the kernel returned.
 
 **LD_PRELOAD shim, v0.2.** For the gap in between — dynamically linked targets where you want syscall-level fidelity without root, or you're on macOS (where `DYLD_INSERT_LIBRARIES` plays the same role). The shim is a small C library that interposes on libc functions and forwards faults from the runner via shared memory.
 
@@ -198,8 +198,9 @@ go install github.com/faultkit/faultkit/cmd/faultkit@latest
 **Requirements**
 
 - **Proxy-mode scenarios**: any platform with a working Go runtime. No privileges.
-- **eBPF-mode scenarios**: Linux 5.8+ with BTF enabled. The simplest path is
-  `sudo`:
+- **eBPF-mode scenarios**: Linux 5.8+ on x86-64, with BTF enabled. (The BPF
+  programs hook `__x64_sys_*` kprobes; arm64 isn't supported yet.) The
+  simplest path is `sudo`:
 
   ```
   sudo faultkit run --scenario flaky-network -- ./your-target
