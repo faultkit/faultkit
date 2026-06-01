@@ -55,6 +55,20 @@ type PIDAware interface {
 	SetTargetPID(pid int) error
 }
 
+// Logf writes one human-facing diagnostic line. The CLI supplies one
+// when --verbose is set; the format string and args follow fmt.Printf.
+type Logf func(format string, args ...any)
+
+// VerboseAware is implemented by injectors that can emit verbose
+// diagnostics — kprobe attach, target PID registration, listen address.
+// The CLI calls SetVerbose before Start when --verbose is set; injectors
+// that don't implement it simply produce no extra output. Implementations
+// must only log from the Start/SetTargetPID/Stop call path (the CLI's main
+// goroutine), never from the concurrent event hot path.
+type VerboseAware interface {
+	SetVerbose(Logf)
+}
+
 // TrySend non-blockingly sends ev on ch, dropping when the buffer is
 // full. Implements the "never block the request hot path" half of the
 // Events contract.
