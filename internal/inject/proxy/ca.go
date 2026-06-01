@@ -4,7 +4,6 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
-	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
@@ -27,12 +26,15 @@ const caValidity = 24 * time.Hour
 // only in process memory plus, optionally, a temp PEM file written for
 // clients that need an `SSL_CERT_FILE`-style path. Cleanup removes the
 // file; nothing is ever installed in a system trust store.
+//
+// Leaf certificates are minted on the fly by martian's mitm.Config
+// (which we hand Cert and Key via mitm.NewConfig); the CA itself only
+// provides the signing root.
 type CA struct {
 	cert *x509.Certificate
 	key  *ecdsa.PrivateKey
 
 	mu      sync.Mutex
-	leaves  map[string]*tls.Certificate
 	pemPath string
 }
 
@@ -74,9 +76,8 @@ func NewCA() (*CA, error) {
 	}
 
 	return &CA{
-		cert:   cert,
-		key:    key,
-		leaves: make(map[string]*tls.Certificate),
+		cert: cert,
+		key:  key,
 	}, nil
 }
 
@@ -85,62 +86,6 @@ func (c *CA) Cert() *x509.Certificate { return c.cert }
 
 // Key returns the CA's signing key.
 func (c *CA) Key() *ecdsa.PrivateKey { return c.key }
-
-// MintLeaf returns a leaf certificate for host, signed by the CA.
-// Hosts are normalized (lowercased, trailing dot stripped, optional
-// port stripped) before lookup, so equivalent inputs share a cache
-// entry.
-func (c *CA) MintLeaf(host string) (*tls.Certificate, error) {
-	host = normalizeHost(host)
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if cached, ok := c.leaves[host]; ok {
-		return cached, nil
-	}
-
-	leafKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		return nil, fmt.Errorf("leaf: generate key: %w", err)
-	}
-	serial, err := rand.Int(rand.Reader, mitm.MaxSerialNumber)
-	if err != nil {
-		return nil, fmt.Errorf("leaf: serial: %w", err)
-	}
-
-	now := time.Now()
-	template := &x509.Certificate{
-		SerialNumber: serial,
-		Subject:      pkix.Name{CommonName: host},
-		NotBefore:    now.Add(-time.Minute),
-		NotAfter:     now.Add(caValidity),
-		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
-		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-	}
-	if ip := net.ParseIP(host); ip != nil {
-		template.IPAddresses = []net.IP{ip}
-	} else {
-		template.DNSNames = []string{host}
-	}
-
-	der, err := x509.CreateCertificate(rand.Reader, template, c.cert, &leafKey.PublicKey, c.key)
-	if err != nil {
-		return nil, fmt.Errorf("leaf: create cert: %w", err)
-	}
-	leaf, err := x509.ParseCertificate(der)
-	if err != nil {
-		return nil, fmt.Errorf("leaf: parse cert: %w", err)
-	}
-
-	tlsCert := &tls.Certificate{
-		Certificate: [][]byte{der, c.cert.Raw},
-		PrivateKey:  leafKey,
-		Leaf:        leaf,
-	}
-	c.leaves[host] = tlsCert
-	return tlsCert, nil
-}
 
 // WriteCertPEM writes the CA cert in PEM form to a temp file and
 // returns its path. The path is tracked for Cleanup.
