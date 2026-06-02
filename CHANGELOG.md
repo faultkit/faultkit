@@ -45,6 +45,17 @@ corrected to match the implementation. No breaking changes.
   scenarios (flaky-network, tool-permission-denied) and the
   streaming-cutoff goroutine-leak contract.
 
+### Security / supply chain
+
+- All GitHub Actions pinned to commit SHAs and bumped to Node 24
+  runtimes; goreleaser pinned to `~> v2`.
+- golangci-lint added to the CI gate — lint and security scans run on
+  every push and pull request.
+- Dependencies vendored (`vendor/`); builds run hermetically from the
+  in-repo vendor tree.
+- Added `SECURITY.md` (private vulnerability reporting + supply-chain
+  posture) and a "Supply chain security" policy section in `CLAUDE.md`.
+
 ## [0.1.0] - 2026-05-11
 
 First public release.
