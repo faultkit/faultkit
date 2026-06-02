@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/faultkit/faultkit/internal/cli"
+	"github.com/faultkit/faultkit/internal/inject"
 
 	_ "github.com/faultkit/faultkit/internal/scenario/builtin"
 )
@@ -171,6 +172,27 @@ func TestRunWithoutVerboseIsQuiet(t *testing.T) {
 	_, _, stderr := runCLI(t, "run", "--scenario", "llm-api-degraded", "--", "true")
 	if strings.Contains(stderr, "[faultkit]") {
 		t.Errorf("non-verbose run should not emit [faultkit] lines: %s", stderr)
+	}
+}
+
+func TestRunEBPFUnavailableHostGivesClearError(t *testing.T) {
+	ebpfAvailable := false
+	for _, r := range inject.AvailableModes() {
+		if r.Mode == inject.ModeEBPF {
+			ebpfAvailable = r.Available
+		}
+	}
+	if ebpfAvailable {
+		t.Skip("eBPF is available on this host; the unavailable-path guard is a no-op here")
+	}
+	// On a host where `check` reports eBPF unavailable, `run` must fail fast
+	// with that same reason rather than an opaque injector load/attach error.
+	code, _, stderr := runCLI(t, "run", "--mode", "ebpf", "--scenario", "flaky-network", "--", "true")
+	if code != cli.ExitInternalError {
+		t.Fatalf("code=%d, want %d (stderr=%q)", code, cli.ExitInternalError, stderr)
+	}
+	if !strings.Contains(stderr, "not available") {
+		t.Errorf("stderr should explain eBPF is unavailable on this host: %q", stderr)
 	}
 }
 
