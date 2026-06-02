@@ -12,15 +12,15 @@ LDFLAGS := -X $(CLI_PKG).version=$(VERSION) \
 .PHONY: build test test-integration test-docker lint sec bpf clean
 
 build:
-	go build -ldflags '$(LDFLAGS)' -o bin/faultkit ./cmd/faultkit
+	go build -mod=vendor -ldflags '$(LDFLAGS)' -o bin/faultkit ./cmd/faultkit
 
 test:
-	go test ./...
+	go test -mod=vendor ./...
 
 # End-to-end tests against real client SDKs. Each test skips if its
 # prereqs aren't met (e.g. python3+pytest+openai for the proxy test).
 test-integration: build
-	go test -tags integration ./test/integration/...
+	go test -mod=vendor -tags integration ./test/integration/...
 
 # Run the integration tests inside a reproducible container so
 # contributors don't need python3+pytest+openai installed locally.
@@ -29,8 +29,8 @@ test-docker:
 	docker run --rm faultkit-test:latest
 
 lint:
-	go vet ./...
-	@diff=$$(gofmt -l .); \
+	go vet -mod=vendor ./...
+	@diff=$$(gofmt -l . | grep -v '^vendor/' || true); \
 	if [ -n "$$diff" ]; then \
 		echo "gofmt issues in:"; echo "$$diff"; exit 1; \
 	fi
