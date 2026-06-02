@@ -51,3 +51,18 @@ Thumbs.db
 faultkit-ca-*.pem
 *.faultkit-trace
 report.json
+
+# Private keys & credentials — never commit (see SECURITY.md).
+# Defensive: release/signing keys (AUR, GPG, SSH) live outside the repo;
+# these patterns make an accidental `git add` of one a no-op.
+*.pem
+*.key
+*.pkcs12
+*.p12
+id_rsa
+id_ecdsa
+id_ed25519
+*_rsa
+*_ecdsa
+*_ed25519
+aur_key*
