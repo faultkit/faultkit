@@ -6,7 +6,8 @@
 *.out
 
 # Go-specific
-/vendor/
+# vendor/ IS committed — builds run from it (-mod=vendor), per the
+# supply-chain policy in CLAUDE.md.
 *.prof
 coverage.txt
 coverage.html
