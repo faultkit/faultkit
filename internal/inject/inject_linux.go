@@ -84,11 +84,7 @@ func notDigit(r rune) bool { return r < '0' || r > '9' }
 // hasBPFCaps reports whether the effective capability set has the three
 // caps eBPF mode needs. PR_SET_DUMPABLE (see ebpf_linux.go) covers the
 // /proc/self/mem read at load, so CAP_SYS_PTRACE is intentionally not
-// required here.
-//
-// TODO: the README's `setcap` example still lists cap_sys_ptrace.
-// Confirm on a real eBPF box that these three caps alone are sufficient,
-// then drop cap_sys_ptrace from the docs (or document why it's needed).
+// required here — verified on a real eBPF host under file caps.
 func hasBPFCaps() bool {
 	data, err := os.ReadFile("/proc/self/status")
 	if err != nil {
