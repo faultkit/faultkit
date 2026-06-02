@@ -211,23 +211,22 @@ go install github.com/faultkit/faultkit/cmd/faultkit@latest
   ```
 
   The file-capabilities path also works and avoids running the target
-  as root, but it requires one extra capability for cilium/ebpf to
-  detect the kernel version:
+  as root. faultkit needs three capabilities:
 
   ```
-  sudo setcap 'cap_bpf,cap_net_admin,cap_perfmon,cap_sys_ptrace=+ep' /usr/local/bin/faultkit
+  sudo setcap 'cap_bpf,cap_net_admin,cap_perfmon=+ep' /usr/local/bin/faultkit
   ```
 
-  - `cap_bpf` + `cap_net_admin` — load BPF programs and attach the kprobe.
+  - `cap_bpf` + `cap_net_admin` — load BPF programs and attach the kprobes.
   - `cap_perfmon` — kernel requires it for tracing-class BPF programs (kprobes, tracepoints).
-  - `cap_sys_ptrace` — see the dumpable note below.
 
-  When running under file caps, faultkit calls `prctl(PR_SET_DUMPABLE, 1)`
-  on Linux so cilium/ebpf can read `/proc/self/mem`. The trade-off is
-  that other processes running as your user can ptrace-attach to
-  faultkit while it's running. faultkit is a developer tool — that's
-  acceptable on a developer machine or single-tenant CI runner. If
-  it's not acceptable in your environment, use `sudo` instead.
+  No `cap_sys_ptrace` is needed: at load time faultkit briefly raises its
+  own `dumpable` flag via `prctl(PR_SET_DUMPABLE, 1)` so cilium/ebpf can
+  read `/proc/self/mem` for kernel/BTF detection, then restores it. The
+  trade-off is a short window during load where another process running as
+  your user could ptrace-attach to faultkit. faultkit is a developer tool —
+  that's acceptable on a developer machine or single-tenant CI runner. If
+  it's not, use `sudo` instead.
 
 **Process-tree propagation works through wrappers.** faultkit registers
 the PID it forks; descendants inherit the registration automatically,
