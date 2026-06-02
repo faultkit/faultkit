@@ -1,6 +1,6 @@
 <div align="center">
 
-# faultkit
+<img src="assets/faultkit-logo.png" alt="faultkit" width="600">
 
 ### Run the error handlers you've never run.
 
