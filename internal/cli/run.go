@@ -216,6 +216,9 @@ func pickInjector(s *scenario.Scenario, mode string) (inject.Injector, error) {
 		case hasHTTP:
 			return proxy.New(), nil
 		case hasSyscall:
+			if err := ebpfUnavailableErr(); err != nil {
+				return nil, err
+			}
 			return ebpf.New(), nil
 		}
 		return nil, fmt.Errorf("scenario %q has no experiments any injector can serve", s.Name)
@@ -228,10 +231,26 @@ func pickInjector(s *scenario.Scenario, mode string) (inject.Injector, error) {
 		if !hasSyscall {
 			return nil, UsageErrorf("scenario %q has no syscall experiments; --mode=ebpf is incompatible", s.Name)
 		}
+		if err := ebpfUnavailableErr(); err != nil {
+			return nil, err
+		}
 		return ebpf.New(), nil
 	default:
 		return nil, UsageErrorf("--mode must be %s, %s, or %s; got %q", modeAuto, modeProxy, modeEBPF, mode)
 	}
+}
+
+// ebpfUnavailableErr reports a clear error when eBPF mode can't run on this
+// host, reusing the same reason `faultkit check` computes. Returning it from
+// pickInjector lets `run` fail fast with that reason instead of an opaque
+// load/attach failure deep inside the injector's Start.
+func ebpfUnavailableErr() error {
+	for _, r := range inject.AvailableModes() {
+		if r.Mode == inject.ModeEBPF && !r.Available {
+			return fmt.Errorf("eBPF mode is not available on this host: %s", r.Reason)
+		}
+	}
+	return nil
 }
 
 // verboseEventLine renders one fault event for --verbose output, picking
