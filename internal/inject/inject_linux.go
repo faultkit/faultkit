@@ -72,11 +72,11 @@ func kernelAtLeast(version string, wantMajor, wantMinor int) bool {
 	if maj != wantMajor {
 		return maj > wantMajor
 	}
-	min, err := strconv.Atoi(minStr)
+	minor, err := strconv.Atoi(minStr)
 	if err != nil {
 		return false
 	}
-	return min >= wantMinor
+	return minor >= wantMinor
 }
 
 func notDigit(r rune) bool { return r < '0' || r > '9' }

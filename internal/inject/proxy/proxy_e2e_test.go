@@ -88,7 +88,7 @@ func TestE2E_MalformedJSON(t *testing.T) {
 			Probability: 1.0,
 		}},
 	}
-	upstream, client := e2e(t, s, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	upstream, client := e2e(t, s, http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 		t.Error("upstream should not be reached when fault fires")
 	}))
 
