@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-06-02
+
+Maintenance and polish on top of v0.1.0 — bug fixes, honest mode
+reporting, a working `--verbose`, broader test coverage, and docs
+corrected to match the implementation. No breaking changes.
+
+### Fixed
+
+- `faultkit run` now fails fast with a clear reason when eBPF mode is
+  unavailable on the host (missing capabilities, non-x86-64, or a kernel
+  without `CONFIG_BPF_KPROBE_OVERRIDE`) instead of an opaque loader error
+  during startup — `run` and `check` now agree.
+- `faultkit check` reports eBPF as unavailable on non-x86-64 hosts (the
+  BPF programs hook `__x64_sys_*` kprobes).
+- `--verbose` now works: it logs injector lifecycle (mode, scenario,
+  kprobe attach, target PID registration) and each fault as it fires. It
+  was previously declared but ignored.
+
+### Changed
+
+- README corrected to match the implementation: eBPF uses kprobes (not
+  tracepoints) on `recvmsg`/`recvfrom`/`openat`; documented the
+  `CONFIG_BPF_KPROBE_OVERRIDE` kernel requirement; dropped the
+  unnecessary `cap_sys_ptrace` from the `setcap` example (the three BPF
+  caps are sufficient, verified on-host); noted the proxy serves
+  HTTP/1.1.
+
+### Added
+
+- Project logo (`assets/faultkit-logo.svg` / `.png`) and a README hero.
+
+### Internal
+
+- Removed unused leaf-minting code from the proxy CA (martian mints the
+  leaf certs). Added end-to-end integration tests for both eBPF
+  scenarios (flaky-network, tool-permission-denied) and the
+  streaming-cutoff goroutine-leak contract.
+
 ## [0.1.0] - 2026-05-11
 
 First public release.
@@ -86,5 +124,6 @@ breaking changes require a major version bump.
 - [YAML schema](./docs/yaml-schema.md) — author your own scenarios.
 - [Using faultkit in CI](./docs/ci.md) — GitHub Actions recipes.
 
-[Unreleased]: https://github.com/faultkit/faultkit/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/faultkit/faultkit/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/faultkit/faultkit/releases/tag/v0.1.1
 [0.1.0]: https://github.com/faultkit/faultkit/releases/tag/v0.1.0
