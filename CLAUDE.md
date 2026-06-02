@@ -141,11 +141,12 @@ If a finding is genuinely a false positive:
 
 Each suppression is a small documented decision. Don't blanket-suppress.
 
-`gosec` and `nilaway` are external tools, not in `go.mod`. Install once:
+`gosec` and `nilaway` are external tools, not in `go.mod`. Install the
+exact versions CI pins (never `@latest` — see "Supply chain security"):
 
 ```
-go install github.com/securego/gosec/v2/cmd/gosec@latest
-go install go.uber.org/nilaway/cmd/nilaway@latest
+go install github.com/securego/gosec/v2/cmd/gosec@v2.26.1
+go install go.uber.org/nilaway/cmd/nilaway@v0.0.0-20260318203545-ad240b12fb4c
 ```
 
 `nilaway` is invoked with `-include-pkgs=github.com/faultkit/faultkit`
@@ -164,6 +165,51 @@ The dependencies we have:
 - `github.com/spf13/cobra` — CLI framework
 - `github.com/spf13/viper` — config (used sparingly)
 - `gopkg.in/yaml.v3` — YAML parsing (NOT v2)
+
+### Supply chain security
+
+These rules harden the build and CI/CD against compromised dependencies
+and tooling. They are non-negotiable; a change that weakens any of them
+gets flagged, not merged.
+
+- **Pin every GitHub Action to a full commit SHA, never a tag or
+  branch.** Put the human-readable version in a trailing comment:
+  `uses: actions/checkout@de0fac2…dd # v6.0.2`. Tags (`@v6`, `@main`,
+  `@latest`) are mutable — a moved or compromised tag silently changes
+  what runs in CI. To bump, change both the SHA and the comment.
+
+- **Pin lint and security tools the same way — never `@latest`, never a
+  floating version.** Action-based tools get a commit SHA (above).
+  `go install`-ed tools (gosec, nilaway, govulncheck, golangci-lint) get
+  an exact, immutable identifier — a tagged version that resolves through
+  `go.sum` / the checksum DB, or a commit pseudo-version — and are
+  preferably declared as `go.mod` tool dependencies so `go.sum`
+  hash-verifies them. `@latest` in a workflow or Makefile is a bug.
+
+- **Security and linters always run in CI** — on every push and PR,
+  never skipped or made optional. The full gate is `gofmt`, `go vet`,
+  golangci-lint, gosec, nilaway, and govulncheck. A red lint or security
+  check blocks merge.
+
+- **Least-privilege tokens and secrets.** Every workflow declares an
+  explicit minimal `permissions:` block (default `contents: read`);
+  elevate per-job only where strictly needed (e.g. `contents: write` on
+  the release job alone). Prefer the built-in `GITHUB_TOKEN` over a PAT
+  whenever it suffices, and never expose a secret to a job that doesn't
+  need it.
+
+- **Cooldown on new dependency versions (~10 days).** When adding or
+  bumping a dependency — Go module, action, or tool — prefer a version
+  published at least ~10 days ago, not one released today. Most
+  compromised or malicious releases are caught and yanked within days; a
+  cooldown avoids pulling a freshly poisoned version.
+
+- **Vendor dependencies where practical.** Keep a committed `vendor/`
+  directory (`go mod vendor`) and build/test with `-mod=vendor`, so
+  dependencies come from the repo rather than being fetched from the
+  network at build time. Vendored code is reviewable in diffs, builds are
+  hermetic and reproducible, and a compromised module proxy can't affect
+  a build.
 
 ### Error handling
 
