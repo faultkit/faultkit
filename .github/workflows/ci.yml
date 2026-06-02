@@ -39,7 +39,7 @@ jobs:
 
       - name: gofmt
         run: |
-          diff=$(gofmt -l .)
+          diff=$(gofmt -l . | grep -v '^vendor/' || true)
           if [ -n "$diff" ]; then
             echo "::error::gofmt issues in:"
             echo "$diff"
