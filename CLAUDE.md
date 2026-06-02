@@ -141,11 +141,12 @@ If a finding is genuinely a false positive:
 
 Each suppression is a small documented decision. Don't blanket-suppress.
 
-`gosec` and `nilaway` are external tools, not in `go.mod`. Install once:
+`gosec` and `nilaway` are external tools, not in `go.mod`. Install the
+exact versions CI pins (never `@latest` — see "Supply chain security"):
 
 ```
-go install github.com/securego/gosec/v2/cmd/gosec@latest
-go install go.uber.org/nilaway/cmd/nilaway@latest
+go install github.com/securego/gosec/v2/cmd/gosec@v2.26.1
+go install go.uber.org/nilaway/cmd/nilaway@v0.0.0-20260318203545-ad240b12fb4c
 ```
 
 `nilaway` is invoked with `-include-pkgs=github.com/faultkit/faultkit`
