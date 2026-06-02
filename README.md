@@ -192,8 +192,7 @@ chmod +x faultkit-darwin-arm64 && sudo mv faultkit-darwin-arm64 /usr/local/bin/f
 **Package managers**
 
 ```bash
-yay -S faultkit              # Arch (AUR)
-nix-env -iA nixpkgs.faultkit # Nix
+yay -S faultkit-bin          # Arch (AUR)
 go install github.com/faultkit/faultkit/cmd/faultkit@latest
 ```
 
