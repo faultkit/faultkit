@@ -7,11 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.1.1] - 2026-06-02
+## [0.1.1] - 2026-06-03
 
-Maintenance and polish on top of v0.1.0 — bug fixes, honest mode
-reporting, a working `--verbose`, broader test coverage, and docs
-corrected to match the implementation. No breaking changes.
+The first maintenance release after v0.1.0. Upgrading is drop-in: no
+changes to the CLI surface, exit codes, or scenario YAML schema, so
+anything that ran against v0.1.0 runs unchanged against v0.1.1.
+
+What moves from v0.1.0 to v0.1.1: `run` and `check` now agree on mode
+availability and fail fast with a clear reason instead of an opaque
+loader error; `--verbose` actually logs (it was declared but ignored in
+v0.1.0); the docs were corrected to match the implementation; test
+coverage broadened to the eBPF scenarios and the streaming path; and the
+build, CI, and supply chain were hardened.
 
 ### Fixed
 
@@ -55,6 +62,11 @@ corrected to match the implementation. No breaking changes.
   in-repo vendor tree.
 - Added `SECURITY.md` (private vulnerability reporting + supply-chain
   posture) and a "Supply chain security" policy section in `CLAUDE.md`.
+- Pinned the Go toolchain and bumped it to 1.25.11, clearing two
+  standard-library advisories reachable from faultkit: GO-2026-5037
+  (`crypto/x509` candidate-hostname parsing) and GO-2026-5039
+  (`net/textproto`). Release binaries are built with the patched
+  toolchain.
 
 ## [0.1.0] - 2026-05-11
 
