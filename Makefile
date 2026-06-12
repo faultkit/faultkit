@@ -9,7 +9,7 @@ LDFLAGS := -X $(CLI_PKG).version=$(VERSION) \
            -X $(CLI_PKG).commit=$(COMMIT) \
            -X $(CLI_PKG).date=$(DATE)
 
-.PHONY: build test test-integration test-docker lint sec bpf clean
+.PHONY: build test test-integration test-docker lint sec bpf clean release release-snapshot
 
 build:
 	go build -mod=vendor -ldflags '$(LDFLAGS)' -o bin/faultkit ./cmd/faultkit
@@ -77,3 +77,27 @@ bpf/vmlinux.h:
 
 clean:
 	rm -rf bin/ dist/
+
+# Local-release model: releases are cut from a maintainer's machine, not
+# CI, so no publish credential is ever stored as a GitHub secret. The
+# GitHub release uses your `gh` auth; AUR uses the AUR signing key
+# (AUR_KEY=<path>, e.g. ~/.ssh/aur_key); the Homebrew tap is pushed over
+# your ambient GitHub SSH. Tag and push first, then `make release`.
+GORELEASER_VERSION := v2.16.0
+
+release:
+	@command -v goreleaser >/dev/null 2>&1 || { \
+		echo "goreleaser not installed; install the pinned version:"; \
+		echo "  go install github.com/goreleaser/goreleaser/v2@$(GORELEASER_VERSION)"; \
+		exit 1; \
+	}
+	@test -n "$$AUR_KEY" || { \
+		echo "set AUR_KEY to the AUR ssh key path, e.g. AUR_KEY=~/.ssh/aur_key make release"; \
+		exit 1; \
+	}
+	GITHUB_TOKEN="$$(gh auth token)" goreleaser release --clean
+
+# Dry run: build everything and generate the PKGBUILD + Homebrew formula
+# under dist/ without publishing or pushing anything.
+release-snapshot:
+	AUR_KEY="$${AUR_KEY:-dummy}" goreleaser release --snapshot --clean

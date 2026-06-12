@@ -192,7 +192,8 @@ chmod +x faultkit-darwin-arm64 && sudo mv faultkit-darwin-arm64 /usr/local/bin/f
 **Package managers**
 
 ```bash
-yay -S faultkit-bin          # Arch (AUR)
+brew install faultkit/tap/faultkit   # macOS / Linux (Homebrew)
+yay -S faultkit-bin                   # Arch (AUR)
 go install github.com/faultkit/faultkit/cmd/faultkit@latest
 ```
 
