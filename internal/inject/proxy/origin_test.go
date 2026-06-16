@@ -64,3 +64,38 @@ func TestOriginUnknownPath(t *testing.T) {
 		t.Errorf("status = %d, want 404 for unrecognized base-URL path", rec.Code)
 	}
 }
+
+// Anthropic /v1/messages routes through the anthropic prefix and fires its
+// experiment — the parity added for Claude-only agentic tools (T11).
+func TestOriginAnthropicSynthetic(t *testing.T) {
+	body := `{"id":"msg_test","type":"message","content":[{"type":"text","text":"x"}],}`
+	s := &scenario.Scenario{
+		Name: "anthropic-malformed",
+		Experiments: []scenario.Experiment{{
+			Name:        "anthropic-malformed",
+			Fault:       faulttypes.Fault{HTTPStatus: 200, ResponseBody: body},
+			Match:       scenario.Match{Host: "api.anthropic.com", Path: "/v1/messages"},
+			Probability: 1,
+		}},
+	}
+	h, events := newOriginTestHandler(t, s)
+
+	req := httptest.NewRequest(http.MethodPost, "/__fk/anthropic/v1/messages", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if rec.Body.String() != body {
+		t.Errorf("body = %q, want the synthetic malformed body", rec.Body.String())
+	}
+	select {
+	case ev := <-events:
+		if !ev.Fired || ev.Host != "api.anthropic.com" {
+			t.Errorf("event = %+v, want fired on api.anthropic.com", ev)
+		}
+	default:
+		t.Error("expected a fired fault event")
+	}
+}

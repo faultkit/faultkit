@@ -10,3 +10,12 @@ experiments:
       host: api.openai.com
       path: /v1/chat/completions
     probability: 0.15
+  - name: trailing-comma-anthropic
+    fault:
+      http_status: 200
+      response_body: |
+        {"id":"msg_test","type":"message","role":"assistant","model":"claude-sonnet-4","content":[{"type":"text","text":"{\"action\":\"lookup\",\"args\":{\"id\":42},}"}],"stop_reason":"end_turn","usage":{"input_tokens":10,"output_tokens":8}}
+    match:
+      host: api.anthropic.com
+      path: /v1/messages
+    probability: 0.15
