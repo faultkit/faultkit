@@ -43,12 +43,13 @@ func newRunCmd() *cobra.Command {
 	cmd.Flags().StringVar(&opts.mode, "mode", modeAuto, "injection mode: auto, proxy, ebpf")
 	cmd.Flags().StringVar(&opts.reportPath, "report", "", "write JSON report to path")
 	cmd.Flags().BoolVar(&opts.verbose, "verbose", false, "log injector activity and each fault as it fires")
+	cmd.Flags().BoolVar(&opts.baseURL, "base-url", false, "point the target's SDK at faultkit via *_BASE_URL env (OPENAI_BASE_URL, ANTHROPIC_BASE_URL) instead of HTTPS_PROXY — for clients that ignore proxy env")
 	return cmd
 }
 
 type runOpts struct {
 	scenarioName, configPath, mode, reportPath string
-	verbose                                    bool
+	verbose, baseURL                           bool
 	target                                     []string
 	stdout, stderr                             io.Writer
 }
@@ -75,7 +76,7 @@ func runFaultkit(parentCtx context.Context, o runOpts) error {
 		return UsageErrorf("missing target command after --")
 	}
 
-	inj, err := pickInjector(s, o.mode)
+	inj, err := pickInjector(s, o.mode, o.baseURL)
 	if err != nil {
 		return err
 	}
@@ -208,14 +209,17 @@ func experimentKinds(s *scenario.Scenario) (hasHTTP, hasSyscall bool) {
 	return hasHTTP, hasSyscall
 }
 
-func pickInjector(s *scenario.Scenario, mode string) (inject.Injector, error) {
+func pickInjector(s *scenario.Scenario, mode string, baseURL bool) (inject.Injector, error) {
 	hasHTTP, hasSyscall := experimentKinds(s)
 	switch mode {
 	case modeAuto:
 		switch {
 		case hasHTTP:
-			return proxy.New(), nil
+			return newProxyInjector(baseURL), nil
 		case hasSyscall:
+			if baseURL {
+				return nil, errBaseURLNeedsHTTP
+			}
 			if err := ebpfUnavailableErr(); err != nil {
 				return nil, err
 			}
@@ -226,8 +230,11 @@ func pickInjector(s *scenario.Scenario, mode string) (inject.Injector, error) {
 		if !hasHTTP {
 			return nil, UsageErrorf("scenario %q has no HTTP experiments; --mode=proxy is incompatible", s.Name)
 		}
-		return proxy.New(), nil
+		return newProxyInjector(baseURL), nil
 	case modeEBPF:
+		if baseURL {
+			return nil, errBaseURLNeedsHTTP
+		}
 		if !hasSyscall {
 			return nil, UsageErrorf("scenario %q has no syscall experiments; --mode=ebpf is incompatible", s.Name)
 		}
@@ -238,6 +245,21 @@ func pickInjector(s *scenario.Scenario, mode string) (inject.Injector, error) {
 	default:
 		return nil, UsageErrorf("--mode must be %s, %s, or %s; got %q", modeAuto, modeProxy, modeEBPF, mode)
 	}
+}
+
+// errBaseURLNeedsHTTP is returned when --base-url is combined with a
+// syscall-only (eBPF) scenario or --mode=ebpf; base-URL injection only
+// applies to HTTP/proxy traffic.
+var errBaseURLNeedsHTTP = UsageErrorf("--base-url only applies to HTTP scenarios (proxy mode)")
+
+// newProxyInjector builds the proxy injector, switching it into base-URL
+// mode when requested.
+func newProxyInjector(baseURL bool) inject.Injector {
+	p := proxy.New()
+	if baseURL {
+		p.UseBaseURL(true)
+	}
+	return p
 }
 
 // ebpfUnavailableErr reports a clear error when eBPF mode can't run on this
