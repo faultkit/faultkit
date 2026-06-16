@@ -74,6 +74,19 @@ func providerForPath(path string) (p provider, rest string, ok bool) {
 	return provider{}, "", false
 }
 
+// knownProviderIDs is the comma-joined list of every registered provider
+// id, for error messages.
+func knownProviderIDs() string { return providerIDList(providerRegistry) }
+
+// providerIDList comma-joins the ids of ps.
+func providerIDList(ps []provider) string {
+	ids := make([]string, len(ps))
+	for i, p := range ps {
+		ids[i] = p.id
+	}
+	return strings.Join(ids, ", ")
+}
+
 // providersForHostGlobs returns the registered providers whose upstream
 // host is targeted by any of the given host globs (e.g. a scenario's
 // match.host clauses). It uses the same glob semantics as the matcher, so
