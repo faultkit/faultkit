@@ -114,11 +114,13 @@ faultkit picks the right injection mechanism for each scenario automatically. Th
 
 This relies on the target trusting faultkit's per-run CA (it does — faultkit points the standard CA-bundle environment variables at it). The one thing it can't intercept is **certificate pinning**: a client that pins a specific certificate or public key, rather than trusting the system/injected CA bundle, will reject the proxy's leaf and the scenario won't fire. The mainstream LLM SDKs (OpenAI, Anthropic, and the like) don't pin, so this mostly affects hardened mobile or bespoke clients.
 
+**Base-URL mode (`--base-url`).** Some clients ignore `HTTPS_PROXY` entirely — Node's global `fetch`/undici, and SDKs running inside a subprocess whose environment is filtered. For those, `faultkit run --base-url` points the SDK at faultkit directly by injecting the provider's base-URL variable (`OPENAI_BASE_URL`, `ANTHROPIC_BASE_URL`, …) instead of a proxy setting. The SDK connects to faultkit as if it were the API; faultkit synthesizes the fault or forwards to the real upstream. No proxy env to honor, no CA trust to arrange — which is what makes it work for the SDK-based clients that dominate agent code.
+
 **eBPF, Linux 5.8+.** For syscall-level scenarios — backend chaos, tool-call subprocess failures, file permission denials. faultkit attaches small eBPF programs to the relevant syscall kprobes (`recvmsg`, `recvfrom`, `openat`) and uses `bpf_override_return` to rewrite syscall return values for processes inside the target's PID tree. The target sees a real `ECONNRESET`, a real `EACCES`, because that's what the kernel returned.
 
 **LD_PRELOAD shim, v0.2.** For the gap in between — dynamically linked targets where you want syscall-level fidelity without root, or you're on macOS (where `DYLD_INSERT_LIBRARIES` plays the same role). The shim is a small C library that interposes on libc functions and forwards faults from the runner via shared memory.
 
-Auto-mode is the default. Linux + caps available + scenario fits → eBPF. HTTP scenario → proxy. macOS → proxy and (in v0.2) shim. You can always force a mode with `--mode=ebpf` / `--mode=proxy` / `--mode=shim` if you want.
+Auto-mode is the default. Linux + caps available + scenario fits → eBPF. HTTP scenario → proxy. macOS → proxy and (in v0.2) shim. You can always force a mode with `--mode=ebpf` / `--mode=proxy` / `--mode=shim`, and add `--base-url` to make proxy mode inject base-URL env instead of `HTTPS_PROXY`.
 
 Why three mechanisms instead of one: the failures your agent hits in production *don't all live at the same layer*. An LLM 429 lives in HTTP semantics on top of TLS. A `SIGPIPE` on a tool subprocess lives at the pipe stdio layer. An `ENOSPC` lives at the filesystem syscall layer. A single-mechanism tool can fake the others, but the faked version exercises different code paths than the real one. faultkit gives you the real one.
 
