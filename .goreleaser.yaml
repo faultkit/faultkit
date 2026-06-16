@@ -53,3 +53,53 @@ changelog:
       - '^test:'
       - '^chore:'
       - 'Merge'
+
+# Package-manager publishers. These run only during a real
+# `goreleaser release` — i.e. `make release` from a maintainer's machine
+# (the local-release model) — never in CI. No publish credential is ever
+# stored as a GitHub secret: AUR auth uses the AUR-specific SSH key
+# (AUR_KEY -> ~/.ssh/aur_key), and the Homebrew tap is pushed over the
+# maintainer's ambient GitHub SSH. Both download the public release
+# tarballs, so they only resolve once the repo is public (i.e. at launch).
+aurs:
+  - name: faultkit-bin
+    homepage: "https://faultkit.dev"
+    description: "Fault injection for the agent era — exercise the LLM, RAG, and tool-call failures that mocks can't simulate."
+    maintainers: ["Cenk Kalpakoglu <cenk.kalpakoglu@gmail.com>"]
+    license: "Apache-2.0"
+    private_key: "{{ .Env.AUR_KEY }}"
+    git_url: "ssh://aur@aur.archlinux.org/faultkit-bin.git"
+    provides: ["faultkit"]
+    conflicts: ["faultkit"]
+    commit_author:
+      name: faultkit-bot
+      email: bot@faultkit.dev
+
+# NOTE: `brews` (a Homebrew *formula*) is deprecated by goreleaser in
+# favour of `homebrew_casks`, but we keep it deliberately: casks are
+# macOS-only (Linuxbrew has no cask support), whereas this formula's
+# generated `on_linux` blocks let Linux Homebrew users install faultkit
+# too — and Linux is a first-class target here (eBPF mode is Linux-only).
+# `goreleaser check` flags the deprecation; `goreleaser release` still
+# emits a valid multi-platform formula. Revisit if/when goreleaser ships
+# a cross-platform replacement.
+brews:
+  - name: faultkit
+    homepage: "https://faultkit.dev"
+    description: "Fault injection for the agent era — exercise the LLM, RAG, and tool-call failures that mocks can't simulate."
+    license: "Apache-2.0"
+    directory: Formula
+    repository:
+      owner: faultkit
+      name: homebrew-tap
+      branch: main
+      # Pushed over the maintainer's ambient GitHub SSH (no stored token).
+      git:
+        url: "ssh://git@github.com/faultkit/homebrew-tap.git"
+    commit_author:
+      name: faultkit-bot
+      email: bot@faultkit.dev
+    install: |
+      bin.install "faultkit"
+    test: |
+      system "#{bin}/faultkit", "version"

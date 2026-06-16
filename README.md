@@ -180,19 +180,20 @@ curl -sSL https://faultkit.dev/install | sh
 **From a release**
 
 ```bash
-# Linux amd64
-wget https://github.com/faultkit/faultkit/releases/latest/download/faultkit-linux-amd64
-chmod +x faultkit-linux-amd64 && sudo mv faultkit-linux-amd64 /usr/local/bin/faultkit
-
-# macOS arm64 (Apple Silicon)
-wget https://github.com/faultkit/faultkit/releases/latest/download/faultkit-darwin-arm64
-chmod +x faultkit-darwin-arm64 && sudo mv faultkit-darwin-arm64 /usr/local/bin/faultkit
+# Resolve the latest version, then download + extract for your platform.
+# Platforms: linux_amd64 · linux_arm64 · darwin_amd64 · darwin_arm64
+VERSION=$(curl -fsSL https://api.github.com/repos/faultkit/faultkit/releases/latest \
+  | grep -m1 '"tag_name"' | cut -d'"' -f4)
+curl -fsSL "https://github.com/faultkit/faultkit/releases/download/$VERSION/faultkit_${VERSION#v}_linux_amd64.tar.gz" \
+  | tar -xz faultkit
+sudo mv faultkit /usr/local/bin/faultkit
 ```
 
 **Package managers**
 
 ```bash
-yay -S faultkit-bin          # Arch (AUR)
+brew install faultkit/tap/faultkit   # macOS / Linux (Homebrew)
+yay -S faultkit-bin                   # Arch (AUR)
 go install github.com/faultkit/faultkit/cmd/faultkit@latest
 ```
 
