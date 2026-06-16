@@ -7,6 +7,7 @@ import (
 	"math/rand/v2"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/martian/v3"
@@ -33,7 +34,17 @@ type Faulter struct {
 
 	mu  sync.Mutex
 	rng *rand.Rand
+
+	// seen counts target requests that reached faultkit (matched or not),
+	// so the CLI can warn when zero traffic arrived. See observe/Seen.
+	seen atomic.Int64
 }
+
+// observe records that one target request reached faultkit.
+func (f *Faulter) observe() { f.seen.Add(1) }
+
+// Seen reports how many target requests reached faultkit.
+func (f *Faulter) Seen() int { return int(f.seen.Load()) }
 
 // NewFaulter constructs a Faulter for s. If rng is nil, a
 // time-seeded source is used.
@@ -79,6 +90,12 @@ func (f *Faulter) roll(exp *scenario.Experiment) *scenario.Experiment {
 
 // ModifyRequest implements martian.RequestModifier.
 func (f *Faulter) ModifyRequest(req *http.Request) error {
+	// Count real requests (the CONNECT that establishes the MITM tunnel is
+	// not one) so the CLI can tell "no traffic reached us" from "matched
+	// nothing".
+	if req.Method != http.MethodConnect {
+		f.observe()
+	}
 	exp := f.Decide(req)
 	if exp == nil {
 		return nil

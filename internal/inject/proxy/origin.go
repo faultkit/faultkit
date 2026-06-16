@@ -61,6 +61,9 @@ func newOriginHandler(faulter *Faulter, vlog inject.Logf) *originHandler {
 
 // ServeHTTP implements http.Handler.
 func (h *originHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// Any request reaching here is traffic the target routed to faultkit.
+	h.faulter.observe()
+
 	p, rest, ok := providerForPath(r.URL.Path)
 	if !ok {
 		http.Error(w, "faultkit: unrecognized base-URL path", http.StatusNotFound)

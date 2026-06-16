@@ -57,6 +57,10 @@ func TestInjectorBaseURLMode(t *testing.T) {
 	if resp.Header.Get("X-Faultkit-Synthetic") != "true" {
 		t.Errorf("response was not synthesized by faultkit (missing X-Faultkit-Synthetic)")
 	}
+
+	if inj.RequestsSeen() == 0 {
+		t.Error("RequestsSeen() = 0 after a request; the no-traffic warning would misfire")
+	}
 }
 
 // A scenario whose hosts aren't known providers can't be served in

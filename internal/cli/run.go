@@ -157,9 +157,26 @@ func runFaultkit(parentCtx context.Context, o runOpts) error {
 		return &runner.TargetExitError{ExitCode: targetExit}
 	}
 	if summary.FiredCount() == 0 {
+		if ro, ok := inj.(inject.RequestObserver); ok && ro.RequestsSeen() == 0 {
+			warnNoTrafficReached(o)
+		}
 		return runner.ErrFaultNotFired
 	}
 	return nil
+}
+
+// warnNoTrafficReached flags the silent-green trap: the run "passed" only
+// because no request ever reached faultkit, so no fault could fire. The
+// likely cause differs by mode.
+func warnNoTrafficReached(o runOpts) {
+	if o.baseURL {
+		fmt.Fprintln(o.stderr, "warning: no requests reached faultkit — the target's SDK did not use the "+
+			"injected base URL (OPENAI_BASE_URL / ANTHROPIC_BASE_URL). Confirm the SDK reads it and the "+
+			"scenario host is a supported provider.")
+		return
+	}
+	fmt.Fprintln(o.stderr, "warning: no requests reached faultkit's proxy — the target likely ignores "+
+		"HTTPS_PROXY (common with Node fetch/undici and subprocess SDKs). For SDK clients, try --base-url.")
 }
 
 func loadScenario(o runOpts) (*scenario.Scenario, error) {

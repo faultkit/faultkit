@@ -39,6 +39,8 @@ type Injector struct {
 	originLn  net.Listener
 	baseURL   bool
 
+	faulter *Faulter // shared by both modes; counts requests reaching faultkit
+
 	events chan inject.Event
 	vlog   inject.Logf
 
@@ -91,6 +93,7 @@ func (i *Injector) Start(_ context.Context, s *scenario.Scenario) ([]string, err
 	}
 
 	faulter := NewFaulter(s, i.events, nil)
+	i.faulter = faulter
 	server.Proxy().SetRequestModifier(faulter)
 	server.Proxy().SetResponseModifier(faulter)
 
@@ -133,6 +136,7 @@ func (i *Injector) startBaseURL(s *scenario.Scenario) ([]string, error) {
 	addr := ln.Addr().String()
 
 	faulter := NewFaulter(s, i.events, nil)
+	i.faulter = faulter
 	srv := &http.Server{
 		Handler:           newOriginHandler(faulter, i.vlog),
 		ReadHeaderTimeout: 30 * time.Second,
@@ -201,6 +205,17 @@ func (i *Injector) Stop(_ context.Context) error {
 // fault-decision events.
 func (i *Injector) Events() <-chan inject.Event {
 	return i.events
+}
+
+// RequestsSeen reports how many target requests reached the proxy.
+// Implements inject.RequestObserver. Zero after a run means the target's
+// traffic never arrived — it ignored HTTPS_PROXY, or never used the
+// injected base URL.
+func (i *Injector) RequestsSeen() int {
+	if i.faulter == nil {
+		return 0
+	}
+	return i.faulter.Seen()
 }
 
 // Proxy returns the underlying martian proxy so callers can install
