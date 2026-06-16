@@ -47,16 +47,6 @@ func (p provider) baseURL(addr string) string {
 	return "http://" + addr + p.pathPrefix
 }
 
-// providerByID returns the registered provider with the given id.
-func providerByID(id string) (provider, bool) {
-	for _, p := range providerRegistry {
-		if p.id == id {
-			return p, true
-		}
-	}
-	return provider{}, false
-}
-
 // providerForPath resolves an incoming origin-mode request path to its
 // provider and returns the remaining path with the prefix stripped (so
 // the matcher and upstream forwarder see the real API path). ok is false
@@ -73,10 +63,6 @@ func providerForPath(path string) (p provider, rest string, ok bool) {
 	}
 	return provider{}, "", false
 }
-
-// knownProviderIDs is the comma-joined list of every registered provider
-// id, for error messages.
-func knownProviderIDs() string { return providerIDList(providerRegistry) }
 
 // providerIDList comma-joins the ids of ps.
 func providerIDList(ps []provider) string {

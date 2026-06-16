@@ -123,7 +123,7 @@ func (i *Injector) Start(_ context.Context, s *scenario.Scenario) ([]string, err
 func (i *Injector) startBaseURL(s *scenario.Scenario) ([]string, error) {
 	providers := providersForHostGlobs(scenarioHTTPHosts(s))
 	if len(providers) == 0 {
-		return nil, fmt.Errorf("proxy: base-URL mode supports none of this scenario's hosts (known providers: %s)", knownProviderIDs())
+		return nil, fmt.Errorf("proxy: base-URL mode supports none of this scenario's hosts (known providers: %s)", providerIDList(providerRegistry))
 	}
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")

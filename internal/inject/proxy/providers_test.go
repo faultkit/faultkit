@@ -5,22 +5,12 @@ import "testing"
 // White-box: the provider registry is internal plumbing for base-URL mode,
 // not part of the public API, so it's tested in-package.
 
-func TestProviderByID(t *testing.T) {
-	if _, ok := providerByID("nope"); ok {
-		t.Fatal("unknown id should not resolve")
-	}
-	p, ok := providerByID("anthropic")
-	if !ok {
-		t.Fatal("anthropic should be registered")
-	}
-	if p.upstream != "api.anthropic.com" {
-		t.Errorf("upstream = %q, want api.anthropic.com", p.upstream)
-	}
-}
-
 func TestProviderBaseURL(t *testing.T) {
-	p, _ := providerByID("openai")
-	got := p.baseURL("127.0.0.1:8080")
+	openai := providersForHostGlobs([]string{"api.openai.com"})
+	if len(openai) != 1 {
+		t.Fatalf("expected the openai provider, got %d", len(openai))
+	}
+	got := openai[0].baseURL("127.0.0.1:8080")
 	want := "http://127.0.0.1:8080/__fk/openai"
 	if got != want {
 		t.Errorf("baseURL = %q, want %q", got, want)

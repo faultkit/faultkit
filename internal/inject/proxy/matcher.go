@@ -37,11 +37,22 @@ func (m *Matcher) Match(req *http.Request) *scenario.Experiment {
 	if m == nil || len(m.experiments) == 0 || req.Method == http.MethodConnect {
 		return nil
 	}
-	host := normalizeHost(hostFromRequest(req))
 	path := ""
 	if req.URL != nil {
 		path = req.URL.Path
 	}
+	return m.matchHostPath(hostFromRequest(req), path)
+}
+
+// matchHostPath returns the first experiment matching host and path. The
+// host is normalized here, so callers may pass it raw (forward proxy, via
+// Match) or already-resolved (base-URL/origin mode, which knows the
+// upstream host directly and need not smuggle it through a request).
+func (m *Matcher) matchHostPath(host, path string) *scenario.Experiment {
+	if m == nil {
+		return nil
+	}
+	host = normalizeHost(host)
 	for i := range m.experiments {
 		exp := &m.experiments[i]
 		if !globMatch(exp.Match.Host, host) {
