@@ -1,5 +1,5 @@
 name: llm-streaming-cutoff
-description: Streaming chat completion drops the connection mid-token without [DONE].
+description: Streaming chat completion drops the connection mid-token (OpenAI SSE without [DONE]; Anthropic SSE without message_stop).
 experiments:
   - name: drop-after-80-tokens
     fault:
@@ -7,4 +7,11 @@ experiments:
     match:
       host: api.openai.com
       path: /v1/chat/completions
+    probability: 0.1
+  - name: drop-after-80-tokens-anthropic
+    fault:
+      stream_cutoff_tokens: 80
+    match:
+      host: api.anthropic.com
+      path: /v1/messages
     probability: 0.1

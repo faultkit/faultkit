@@ -7,6 +7,7 @@ import (
 	"math/rand/v2"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/martian/v3"
@@ -33,7 +34,17 @@ type Faulter struct {
 
 	mu  sync.Mutex
 	rng *rand.Rand
+
+	// seen counts target requests that reached faultkit (matched or not),
+	// so the CLI can warn when zero traffic arrived. See observe/Seen.
+	seen atomic.Int64
 }
+
+// observe records that one target request reached faultkit.
+func (f *Faulter) observe() { f.seen.Add(1) }
+
+// Seen reports how many target requests reached faultkit.
+func (f *Faulter) Seen() int { return int(f.seen.Load()) }
 
 // NewFaulter constructs a Faulter for s. If rng is nil, a
 // time-seeded source is used.
@@ -53,7 +64,19 @@ func NewFaulter(s *scenario.Scenario, events chan<- inject.Event, rng *rand.Rand
 // no experiment matches or the dice roll declined. Pure function;
 // useful for unit tests that can't construct a martian context.
 func (f *Faulter) Decide(req *http.Request) *scenario.Experiment {
-	exp := f.matcher.Match(req)
+	return f.roll(f.matcher.Match(req))
+}
+
+// DecideHostPath is Decide for callers that resolve the host and path
+// themselves (base-URL/origin mode) rather than reading them from a
+// request. Same matching and dice roll.
+func (f *Faulter) DecideHostPath(host, path string) *scenario.Experiment {
+	return f.roll(f.matcher.matchHostPath(host, path))
+}
+
+// roll applies the probability dice to a matched experiment, returning it
+// if the fault should fire, or nil otherwise (including when exp is nil).
+func (f *Faulter) roll(exp *scenario.Experiment) *scenario.Experiment {
 	if exp == nil {
 		return nil
 	}
@@ -67,6 +90,12 @@ func (f *Faulter) Decide(req *http.Request) *scenario.Experiment {
 
 // ModifyRequest implements martian.RequestModifier.
 func (f *Faulter) ModifyRequest(req *http.Request) error {
+	// Count real requests (the CONNECT that establishes the MITM tunnel is
+	// not one) so the CLI can tell "no traffic reached us" from "matched
+	// nothing".
+	if req.Method != http.MethodConnect {
+		f.observe()
+	}
 	exp := f.Decide(req)
 	if exp == nil {
 		return nil
@@ -133,6 +162,22 @@ func applySynthetic(res *http.Response, syn fixtures.Synthetic) {
 		res.Header.Set(k, v)
 	}
 	res.Header.Set(syntheticHeader, "true")
+}
+
+// writeSyntheticResponse renders a fully synthetic fault for exp onto w and
+// emits the fired event. It is the http.ResponseWriter analogue of
+// applySynthetic (which mutates an *http.Response on the forward-proxy
+// path), so base-URL/origin mode renders synthetic faults identically
+// without re-implementing the shape.
+func (f *Faulter) writeSyntheticResponse(w http.ResponseWriter, req *http.Request, exp *scenario.Experiment, host string) {
+	syn := fixtures.Build(host, exp.Fault)
+	for k, v := range syn.Headers {
+		w.Header().Set(k, v)
+	}
+	w.Header().Set(syntheticHeader, "true")
+	w.WriteHeader(syn.Status)
+	_, _ = w.Write(syn.Body)
+	f.emit(req, exp, host)
 }
 
 func (f *Faulter) emit(req *http.Request, exp *scenario.Experiment, host string) {

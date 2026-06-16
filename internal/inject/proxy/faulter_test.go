@@ -2,12 +2,29 @@ package proxy_test
 
 import (
 	"math/rand/v2"
+	"net/http"
 	"testing"
 
 	"github.com/faultkit/faultkit/internal/inject/proxy"
 	"github.com/faultkit/faultkit/pkg/faulttypes"
 	"github.com/faultkit/faultkit/pkg/scenario"
 )
+
+// A real request is counted; the CONNECT that establishes the MITM tunnel
+// is not. Drives the CLI's "no traffic reached faultkit" warning (T10).
+func TestFaulterCountsRequests(t *testing.T) {
+	f := proxy.NewFaulter(&scenario.Scenario{Name: "empty"}, nil, nil)
+	if f.Seen() != 0 {
+		t.Fatalf("Seen() = %d before any request, want 0", f.Seen())
+	}
+	_ = f.ModifyRequest(mustReq(t, "https://api.openai.com/v1/x"))
+	connect := mustReq(t, "https://api.openai.com/v1/x")
+	connect.Method = http.MethodConnect
+	_ = f.ModifyRequest(connect)
+	if f.Seen() != 1 {
+		t.Errorf("Seen() = %d, want 1 (the CONNECT tunnel is not a request)", f.Seen())
+	}
+}
 
 func httpScenario(probability float64) *scenario.Scenario {
 	return &scenario.Scenario{

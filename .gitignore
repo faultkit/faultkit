@@ -26,9 +26,10 @@ coverage.html
 /tmp/
 /test/integration/tmp/
 
-# Example deps and caches
+# Example deps and caches. Lockfiles ARE committed: package-lock.json pins
+# the example deps so CI installs them with `npm ci` (exact, reproducible) —
+# a supply-chain requirement, so it must not be ignored.
 **/node_modules/
-**/package-lock.json
 **/__pycache__/
 **/.pytest_cache/
 
