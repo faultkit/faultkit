@@ -37,6 +37,10 @@ jobs:
       - name: Install python deps for integration test
         run: pip install -r test/docker/requirements.txt
 
+      - name: Install Node example deps for base-URL integration test
+        run: npm ci --no-audit --no-fund
+        working-directory: examples/llm-api-degraded/nodejs
+
       - name: gofmt
         run: |
           diff=$(gofmt -l . | grep -v '^vendor/' || true)

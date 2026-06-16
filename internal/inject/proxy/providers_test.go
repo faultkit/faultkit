@@ -11,7 +11,7 @@ func TestProviderBaseURL(t *testing.T) {
 		t.Fatalf("expected the openai provider, got %d", len(openai))
 	}
 	got := openai[0].baseURL("127.0.0.1:8080")
-	want := "http://127.0.0.1:8080/__fk/openai"
+	want := "http://127.0.0.1:8080/__fk/openai/v1"
 	if got != want {
 		t.Errorf("baseURL = %q, want %q", got, want)
 	}

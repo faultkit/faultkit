@@ -35,14 +35,16 @@ func TestInjectorBaseURLMode(t *testing.T) {
 	t.Cleanup(func() { _ = inj.Stop(context.Background()) })
 
 	base := envValue(env, "OPENAI_BASE_URL")
-	if !strings.HasPrefix(base, "http://127.0.0.1:") || !strings.HasSuffix(base, "/__fk/openai") {
-		t.Fatalf("OPENAI_BASE_URL = %q, want http://127.0.0.1:PORT/__fk/openai", base)
+	if !strings.HasPrefix(base, "http://127.0.0.1:") || !strings.HasSuffix(base, "/__fk/openai/v1") {
+		t.Fatalf("OPENAI_BASE_URL = %q, want http://127.0.0.1:PORT/__fk/openai/v1", base)
 	}
 	if envValue(env, "OPENAI_API_BASE") != base {
 		t.Errorf("OPENAI_API_BASE not set to the same base URL")
 	}
 
-	resp, err := http.Get(base + "/v1/chat/completions") //nolint:noctx // test
+	// The SDK appends /chat/completions to the base URL (which already
+	// carries /v1), so faultkit sees /__fk/openai/v1/chat/completions.
+	resp, err := http.Get(base + "/chat/completions") //nolint:noctx // test
 	if err != nil {
 		t.Fatalf("GET base URL: %v", err)
 	}

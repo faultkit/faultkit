@@ -13,13 +13,20 @@ import "strings"
 //     SDKs honor these even when they ignore HTTPS_PROXY.
 //   - pathPrefix: the prefix faultkit serves this provider under, so a
 //     single origin listener can host several providers and still tell
-//     them apart (SDKs append the real path, e.g. /v1/chat/completions,
-//     after the injected base URL).
+//     them apart (SDKs append the real path after the injected base URL).
+//   - apiBase: the API base path the SDK expects the base URL to already
+//     include. OpenAI's SDK uses a base URL of https://api.openai.com/v1
+//     and appends /chat/completions, so faultkit must inject ".../v1";
+//     Anthropic's SDK uses https://api.anthropic.com and appends
+//     /v1/messages, so its apiBase is empty. Getting this right is what
+//     makes the injected URL line up with the real /v1/... paths scenarios
+//     match.
 type provider struct {
 	id         string
 	upstream   string
 	baseURLEnv []string
 	pathPrefix string
+	apiBase    string
 }
 
 // providerRegistry is the set of providers base-URL mode understands.
@@ -30,21 +37,25 @@ var providerRegistry = []provider{
 		upstream:   "api.openai.com",
 		baseURLEnv: []string{"OPENAI_BASE_URL", "OPENAI_API_BASE"},
 		pathPrefix: "/__fk/openai",
+		apiBase:    "/v1",
 	},
 	{
 		id:         "anthropic",
 		upstream:   "api.anthropic.com",
 		baseURLEnv: []string{"ANTHROPIC_BASE_URL"},
 		pathPrefix: "/__fk/anthropic",
+		apiBase:    "",
 	},
 }
 
 // baseURL is the value to inject into this provider's base-URL env vars:
-// faultkit's origin listener (addr is host:port) plus the provider prefix.
-// SDKs append the API path to it, so a request to OpenAI's
-// /v1/chat/completions arrives at faultkit as /__fk/openai/v1/chat/completions.
+// faultkit's origin listener (addr is host:port), the provider prefix, and
+// the API base path the SDK expects (apiBase). The SDK appends the rest of
+// the path; e.g. the OpenAI SDK turns ".../__fk/openai/v1" into a request
+// to ".../__fk/openai/v1/chat/completions", which faultkit strips to
+// "/v1/chat/completions" before matching.
 func (p provider) baseURL(addr string) string {
-	return "http://" + addr + p.pathPrefix
+	return "http://" + addr + p.pathPrefix + p.apiBase
 }
 
 // providerForPath resolves an incoming origin-mode request path to its

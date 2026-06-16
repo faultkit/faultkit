@@ -22,4 +22,8 @@ RUN pip install --break-system-packages --no-cache-dir \
 WORKDIR /workspace
 COPY . .
 
+# Pinned Node deps (package-lock.json) for the base-URL integration test;
+# `npm ci` installs exactly the locked versions.
+RUN cd examples/llm-api-degraded/nodejs && npm ci --no-audit --no-fund
+
 CMD ["make", "test-integration"]
