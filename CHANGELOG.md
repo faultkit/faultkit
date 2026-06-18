@@ -7,6 +7,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-06-18
+
+The second maintenance release. The headline is **base-URL injection** —
+a second way to route a target's LLM traffic through faultkit, for SDK
+clients that ignore `HTTPS_PROXY`. Upgrading is drop-in: `--base-url` is
+opt-in, and the CLI surface, exit codes, and scenario YAML schema are
+unchanged, so anything that ran against v0.1.1 runs unchanged here.
+
+### Added
+
+- **Base-URL injection mode (`--base-url`).** Instead of relying on the
+  target honoring `HTTPS_PROXY`, faultkit points the client's SDK at
+  itself via provider base-URL env vars (`OPENAI_BASE_URL` /
+  `OPENAI_API_BASE`, `ANTHROPIC_BASE_URL`) and injects faults at the
+  origin. This reaches clients that ignore proxy env — Node
+  `fetch`/`undici`, and SDKs spawned as subprocesses. Ships with a
+  provider registry (OpenAI, Anthropic) and an origin-mode request
+  handler, and is documented in the README. `--base-url` applies to
+  HTTP/proxy scenarios only; combining it with a syscall (eBPF) scenario
+  or `--mode=ebpf` is a clear usage error.
+- **Anthropic Messages API parity for the built-in proxy scenarios.**
+  `malformed-json-response` and `llm-streaming-cutoff` now also fault
+  Anthropic `/v1/messages` traffic (streaming drops without
+  `message_stop`; a malformed body shaped like an Anthropic message), not
+  just OpenAI `/v1/chat/completions`.
+- **Base-URL Node example**
+  (`examples/llm-api-degraded/nodejs/baseurl-client.js`) and an
+  end-to-end base-URL integration test.
+
+### Changed
+
+- **A run now warns when no request ever reached faultkit.** Previously a
+  target that silently ignored `HTTPS_PROXY` (or never used the injected
+  base URL) could exit green with no fault fired — a misleading pass.
+  faultkit now prints a mode-specific warning to stderr in that case (and
+  suggests `--base-url` for proxy-ignoring clients). Exit codes are
+  unchanged.
+
+### Internal
+
+- Committed the Node examples' `package-lock.json` files so `npm ci`
+  works in CI and the examples build reproducibly.
+- Added the base-URL injection design and an agentic gap-analysis note
+  under `docs/internal/`.
+
+### Build / supply chain
+
+- **Switched to a local-release model.** The CI release workflow
+  (`.github/workflows/release.yml`) is removed; releases are now cut from
+  a maintainer's machine via goreleaser, so no publish credential is
+  stored as a GitHub secret — the GitHub release uses the maintainer's
+  `gh` auth, AUR uses the AUR signing key, and the Homebrew tap is pushed
+  over ambient GitHub SSH. The goreleaser config gains AUR
+  (`faultkit-bin`) and Homebrew-formula publishers; the release-download
+  docs were corrected to match the goreleaser asset names.
+
 ## [0.1.1] - 2026-06-03
 
 The first maintenance release after v0.1.0. Upgrading is drop-in: no
@@ -147,6 +203,7 @@ breaking changes require a major version bump.
 - [YAML schema](./docs/yaml-schema.md) — author your own scenarios.
 - [Using faultkit in CI](./docs/ci.md) — GitHub Actions recipes.
 
-[Unreleased]: https://github.com/faultkit/faultkit/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/faultkit/faultkit/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/faultkit/faultkit/releases/tag/v0.1.2
 [0.1.1]: https://github.com/faultkit/faultkit/releases/tag/v0.1.1
 [0.1.0]: https://github.com/faultkit/faultkit/releases/tag/v0.1.0
