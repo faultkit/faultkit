@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 
@@ -20,30 +21,23 @@ func newScenarioListCmd() *cobra.Command {
 				fmt.Fprintln(out, "(no builtin scenarios registered)")
 				return nil
 			}
-			loaded := make([]*scenario.Scenario, 0, len(names))
-			nameWidth := 0
+			tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 			for _, name := range names {
 				s, err := scenario.LoadBuiltin(name)
 				if err != nil {
 					return fmt.Errorf("listing builtin %q: %w", name, err)
 				}
-				loaded = append(loaded, s)
-				if len(name) > nameWidth {
-					nameWidth = len(name)
-				}
-			}
-			for _, s := range loaded {
 				mode := scenarioMode(s)
 				if mode == "" {
 					mode = "?"
 				}
 				if s.Description == "" {
-					fmt.Fprintf(out, "%-*s  [%s]\n", nameWidth, s.Name, mode)
+					fmt.Fprintf(tw, "%s\t[%s]\n", s.Name, mode)
 				} else {
-					fmt.Fprintf(out, "%-*s  [%s]  %s\n", nameWidth, s.Name, mode, s.Description)
+					fmt.Fprintf(tw, "%s\t[%s]\t%s\n", s.Name, mode, s.Description)
 				}
 			}
-			return nil
+			return tw.Flush()
 		},
 	}
 }
