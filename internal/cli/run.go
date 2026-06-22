@@ -143,7 +143,7 @@ func runFaultkit(parentCtx context.Context, o runOpts) error {
 		TargetExit: targetExit,
 		Events:     events,
 	}
-	_ = report.WriteTerminal(o.stderr, summary)
+	report.WriteTerminal(o.stderr, summary)
 	if o.reportPath != "" {
 		if err := writeJSONReport(o.reportPath, summary); err != nil {
 			fmt.Fprintf(o.stderr, "warning: writing report: %v\n", err)

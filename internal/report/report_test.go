@@ -37,9 +37,7 @@ func TestFiredCount(t *testing.T) {
 
 func TestWriteTerminal(t *testing.T) {
 	var buf bytes.Buffer
-	if err := report.WriteTerminal(&buf, sample()); err != nil {
-		t.Fatalf("WriteTerminal: %v", err)
-	}
+	report.WriteTerminal(&buf, sample())
 	out := buf.String()
 	wants := []string{
 		"faultkit summary",
@@ -60,7 +58,7 @@ func TestWriteTerminalPassLabel(t *testing.T) {
 	s := sample()
 	s.TargetExit = 0
 	var buf bytes.Buffer
-	_ = report.WriteTerminal(&buf, s)
+	report.WriteTerminal(&buf, s)
 	if !strings.Contains(buf.String(), "(PASS)") {
 		t.Errorf("output should contain (PASS) when TargetExit=0:\n%s", buf.String())
 	}
