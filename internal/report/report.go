@@ -3,6 +3,10 @@
 package report
 
 import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"strings"
 	"time"
 
 	"github.com/faultkit/faultkit/internal/inject"
@@ -26,4 +30,30 @@ func (s Summary) FiredCount() int {
 		}
 	}
 	return n
+}
+
+// WriteTerminal renders s as a short human-readable summary to w.
+func WriteTerminal(w io.Writer, s Summary) {
+	statusLabel := "PASS"
+	if s.TargetExit != 0 {
+		statusLabel = "FAIL"
+	}
+	fmt.Fprintf(w, "=== faultkit summary ===\n"+
+		"scenario:     %s\n"+
+		"target:       %s\n"+
+		"duration:     %s\n"+
+		"faults fired: %d\n"+
+		"target exit:  %d (%s)\n",
+		s.Scenario,
+		strings.Join(s.Target, " "),
+		s.Duration.Round(time.Millisecond),
+		s.FiredCount(),
+		s.TargetExit, statusLabel)
+}
+
+// WriteJSON renders s as indented JSON to w.
+func WriteJSON(w io.Writer, s Summary) error {
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	return enc.Encode(s)
 }

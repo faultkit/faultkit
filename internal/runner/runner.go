@@ -30,7 +30,6 @@ const waitDelay = 5 * time.Second
 // Result is the outcome of running a target to completion.
 type Result struct {
 	ExitCode int
-	Duration time.Duration
 }
 
 // Run forks target with env merged on top of the parent environment,
@@ -69,7 +68,6 @@ func (r *Runner) Run(ctx context.Context, target []string, env []string) (*Resul
 	}
 	cmd.WaitDelay = waitDelay
 
-	start := time.Now()
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("runner: start %s: %w", target[0], err)
 	}
@@ -78,15 +76,13 @@ func (r *Runner) Run(ctx context.Context, target []string, env []string) (*Resul
 	}
 
 	err := cmd.Wait()
-	duration := time.Since(start)
-
 	if err == nil {
-		return &Result{ExitCode: 0, Duration: duration}, nil
+		return &Result{ExitCode: 0}, nil
 	}
 
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) {
-		return &Result{ExitCode: exitErr.ExitCode(), Duration: duration}, nil
+		return &Result{ExitCode: exitErr.ExitCode()}, nil
 	}
 	return nil, fmt.Errorf("runner: wait %s: %w", target[0], err)
 }

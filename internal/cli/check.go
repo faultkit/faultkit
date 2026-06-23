@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"runtime"
+	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 
@@ -23,42 +24,28 @@ func newCheckCmd() *cobra.Command {
 }
 
 func runCheck(out io.Writer) error {
-	if _, err := fmt.Fprintf(out, "platform:    %s/%s\n", runtime.GOOS, runtime.GOARCH); err != nil {
-		return err
-	}
+	fmt.Fprintf(out, "platform:    %s/%s\n", runtime.GOOS, runtime.GOARCH)
 
-	reports := inject.AvailableModes()
-	width := modeColumnWidth(reports)
+	tw := tabwriter.NewWriter(out, 0, 0, 1, ' ', 0)
 	anyAvailable := false
-	for _, r := range reports {
+	for _, r := range inject.AvailableModes() {
 		if r.Available {
 			anyAvailable = true
-			line := fmt.Sprintf("%-*s mode: ok", width, r.Mode)
+			status := "mode: ok"
 			if r.Reason != "" {
-				line += " " + r.Reason
+				status += " " + r.Reason
 			}
-			if _, err := fmt.Fprintln(out, line); err != nil {
-				return err
-			}
+			fmt.Fprintf(tw, "%s\t%s\n", r.Mode, status)
 			continue
 		}
-		if _, err := fmt.Fprintf(out, "%-*s mode: unavailable — %s\n", width, r.Mode, r.Reason); err != nil {
-			return err
-		}
+		fmt.Fprintf(tw, "%s\tmode: unavailable — %s\n", r.Mode, r.Reason)
+	}
+	if err := tw.Flush(); err != nil {
+		return err
 	}
 
 	if !anyAvailable {
 		return errors.New("no fault-injection modes available on this host")
 	}
 	return nil
-}
-
-func modeColumnWidth(reports []inject.ModeReport) int {
-	width := 0
-	for _, r := range reports {
-		if l := len(r.Mode); l > width {
-			width = l
-		}
-	}
-	return width
 }

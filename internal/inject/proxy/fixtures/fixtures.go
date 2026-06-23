@@ -28,8 +28,14 @@ func Build(host string, fault faulttypes.Fault) Synthetic {
 	case "api.anthropic.com":
 		return vendorResponse(fault, anthropicErrorBody)
 	default:
-		return genericResponse(fault)
+		return vendorResponse(fault, genericErrorBody)
 	}
+}
+
+// genericErrorBody is the vendor-agnostic error shape used for hosts
+// faultkit has no specific template for.
+func genericErrorBody(status int) []byte {
+	return []byte(fmt.Sprintf(`{"error":{"message":%q,"type":"api_error"}}`, http.StatusText(status)))
 }
 
 // vendorResponse is the shared shape: caller-supplied body verbatim
@@ -64,17 +70,4 @@ func mergeHeaders(fault faulttypes.Fault, contentType string) map[string]string 
 		out["Content-Type"] = contentType
 	}
 	return out
-}
-
-func genericResponse(fault faulttypes.Fault) Synthetic {
-	status := defaultStatus(fault)
-	headers := mergeHeaders(fault, "application/json")
-	if fault.ResponseBody != "" {
-		return Synthetic{Status: status, Headers: headers, Body: []byte(fault.ResponseBody)}
-	}
-	if status >= 400 {
-		body := []byte(fmt.Sprintf(`{"error":{"message":%q,"type":"api_error"}}`, http.StatusText(status)))
-		return Synthetic{Status: status, Headers: headers, Body: body}
-	}
-	return Synthetic{Status: status, Headers: headers, Body: []byte("{}")}
 }

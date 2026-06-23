@@ -30,9 +30,6 @@ func TestRunSuccess(t *testing.T) {
 	if res.ExitCode != 0 {
 		t.Errorf("ExitCode = %d, want 0", res.ExitCode)
 	}
-	if res.Duration <= 0 {
-		t.Errorf("Duration should be positive, got %v", res.Duration)
-	}
 }
 
 func TestRunNonzeroExitInResult(t *testing.T) {

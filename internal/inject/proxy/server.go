@@ -3,7 +3,6 @@ package proxy
 import (
 	"fmt"
 	"net"
-	"sync"
 
 	"github.com/google/martian/v3"
 	"github.com/google/martian/v3/mitm"
@@ -14,9 +13,6 @@ import (
 type Server struct {
 	proxy *martian.Proxy
 	ln    net.Listener
-
-	mu  sync.Mutex
-	err error
 }
 
 // NewServer constructs a Server using ca as the MITM signing root.
@@ -41,12 +37,7 @@ func (s *Server) Listen() (string, error) {
 		return "", fmt.Errorf("server: listen: %w", err)
 	}
 	s.ln = ln
-	go func() {
-		err := s.proxy.Serve(ln)
-		s.mu.Lock()
-		s.err = err
-		s.mu.Unlock()
-	}()
+	go func() { _ = s.proxy.Serve(ln) }()
 	return ln.Addr().String(), nil
 }
 
@@ -59,14 +50,6 @@ func (s *Server) Stop() error {
 		_ = s.ln.Close()
 	}
 	return nil
-}
-
-// Err returns any error returned by the background Serve loop. Nil
-// while the server is running or after a clean Stop.
-func (s *Server) Err() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.err
 }
 
 // Proxy returns the underlying martian proxy so callers can install
