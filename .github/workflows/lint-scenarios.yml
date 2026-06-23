@@ -1,0 +1,67 @@
+name: Lint scenarios
+
+# Validates every scenario in the in-repo scenarios/ directory and
+# regenerates INDEX.md. The catalog is committed on every push and
+# PR; CI fails if the committed INDEX.md drifts from what
+# scenario-catalog would produce. This is the same gate the
+# registry's CI would run if the registry were a separate repo —
+# folded into the binary repo for v0.1.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scenarios/**'
+      - 'cmd/scenario-catalog/**'
+      - '.github/workflows/lint-scenarios.yml'
+  pull_request:
+    paths:
+      - 'scenarios/**'
+      - 'cmd/scenario-catalog/**'
+      - '.github/workflows/lint-scenarios.yml'
+
+permissions:
+  contents: read
+
+# Pin toolchain to what setup-go installs. With GOTOOLCHAIN=auto (the
+# default) Go can silently download a newer toolchain if go.mod or any
+# dep declares a higher version — which would also bypass our exact
+# go-version pin. `local` forces "use what's installed, don't fetch."
+env:
+  GOTOOLCHAIN: local
+
+jobs:
+  lint-scenarios:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version: '1.25.11'
+          cache: true
+
+      - name: Validate every scenario against the faultkit schema
+        run: |
+          # Reuse the same code path authors run locally: build
+          # faultkit, then 'validate' each YAML. Exits non-zero on
+          # the first failure so the run is loud, not silent.
+          make build
+          find scenarios -name '*.yaml' -print0 | xargs -0 -n1 bin/faultkit validate
+
+      - name: Regenerate INDEX.md
+        run: |
+          # Build the catalog generator and run it. Output goes to
+          # a fresh path so we can diff against the committed file.
+          go build -mod=vendor -o /tmp/scenario-catalog ./cmd/scenario-catalog
+          /tmp/scenario-catalog --root scenarios --out /tmp/INDEX.md
+
+      - name: Verify INDEX.md is up to date
+        run: |
+          if ! diff -u scenarios/INDEX.md /tmp/INDEX.md; then
+            echo "::error::scenarios/INDEX.md is out of date. Run 'go run ./cmd/scenario-catalog' locally and commit the result."
+            exit 1
+          fi
+
+      - name: Build unit tests for the catalog generator
+        run: go test -mod=vendor ./cmd/scenario-catalog/...
