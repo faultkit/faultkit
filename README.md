@@ -172,6 +172,18 @@ Schema reference: [docs.faultkit.dev/scenarios](https://faultkit.dev/docs/scenar
 
 ---
 
+## Scenario registry
+
+faultkit supports a local scenario registry: a directory of
+user-authored scenarios you point the binary at via
+`--registry-root <path>` (or `FAULTKIT_REGISTRY_ROOT`).
+The binary never fetches over the network — you `git clone` (or
+`gh repo clone`) the registry first. See [docs/registry.md](docs/registry.md)
+for the model, the resolution rules, the `faultkit validate`
+subcommand, and how to publish your own scenarios.
+
+---
+
 ## Install
 
 **Quick install**

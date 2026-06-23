@@ -50,3 +50,7 @@ The output of `faultkit check` helps a lot.
 
 [GitHub Discussions](https://github.com/faultkit/faultkit/discussions)
 is the right place. Don't open issues for usage questions.
+
+## Writing a scenario
+
+- For a community scenario, see [docs/registry.md](docs/registry.md) — the registry is a separate repo, and contributions land as PRs there, not here.
