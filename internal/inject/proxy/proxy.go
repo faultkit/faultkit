@@ -39,6 +39,8 @@ type Injector struct {
 	originLn  net.Listener
 	baseURL   bool
 
+	providerScope string // --provider; empty means all providers
+
 	faulter *Faulter // shared by both modes; counts requests reaching faultkit
 
 	events chan inject.Event
@@ -58,6 +60,11 @@ func (i *Injector) SetVerbose(vlog inject.Logf) { i.vlog = vlog }
 // of the Node/SDK ecosystem). Must be called before Start.
 func (i *Injector) UseBaseURL(enabled bool) { i.baseURL = enabled }
 
+// SetProvider restricts fixture-driven failure modes to a single provider id
+// (e.g. "anthropic"). Empty (the default) fans each failure mode out across
+// every provider that has a fixture for it. Must be called before Start.
+func (i *Injector) SetProvider(id string) { i.providerScope = id }
+
 // New returns a new, unstarted Injector.
 func New() *Injector {
 	return &Injector{events: make(chan inject.Event, eventBuffer)}
@@ -71,6 +78,14 @@ func (i *Injector) Start(_ context.Context, s *scenario.Scenario) ([]string, err
 	if i.server != nil || i.originSrv != nil {
 		return nil, errors.New("proxy: already started")
 	}
+
+	// Resolve failure-mode/provider experiments into concrete host/path/fault
+	// experiments before either interception path consumes the scenario.
+	s, err := expandScenario(s, i.providerScope)
+	if err != nil {
+		return nil, err
+	}
+
 	if i.baseURL {
 		return i.startBaseURL(s)
 	}

@@ -24,13 +24,38 @@ func TestPickInjectorBaseURL(t *testing.T) {
 		}},
 	}
 
-	if _, err := pickInjector(httpScn, modeProxy, true); err != nil {
+	if _, err := pickInjector(httpScn, modeProxy, true, ""); err != nil {
 		t.Errorf("base-url + proxy: unexpected error: %v", err)
 	}
-	if _, err := pickInjector(sysScn, modeAuto, true); err == nil {
+	if _, err := pickInjector(sysScn, modeAuto, true, ""); err == nil {
 		t.Error("base-url + syscall-only scenario should be a usage error")
 	}
-	if _, err := pickInjector(sysScn, modeEBPF, true); err == nil {
+	if _, err := pickInjector(sysScn, modeEBPF, true, ""); err == nil {
 		t.Error("base-url + --mode=ebpf should be a usage error")
+	}
+}
+
+// White-box: pickInjector's --provider branch logic.
+func TestPickInjectorProvider(t *testing.T) {
+	httpScn := &scenario.Scenario{
+		Name:        "http",
+		Experiments: []scenario.Experiment{{Name: "x", Failure: "rate-limited", Probability: 1}},
+	}
+	sysScn := &scenario.Scenario{
+		Name: "sys",
+		Experiments: []scenario.Experiment{{
+			Name: "x", Fault: faulttypes.Fault{Errno: "ECONNRESET"},
+			Match: scenario.Match{Syscall: "recvmsg"}, Probability: 1,
+		}},
+	}
+
+	if _, err := pickInjector(httpScn, modeAuto, false, "anthropic"); err != nil {
+		t.Errorf("provider + http: unexpected error: %v", err)
+	}
+	if _, err := pickInjector(httpScn, modeAuto, false, "bogus"); err == nil {
+		t.Error("unknown provider should be a usage error")
+	}
+	if _, err := pickInjector(sysScn, modeAuto, false, "openai"); err == nil {
+		t.Error("provider + syscall-only scenario should be a usage error")
 	}
 }

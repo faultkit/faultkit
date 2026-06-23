@@ -17,13 +17,34 @@ type Scenario struct {
 	Experiments []Experiment `yaml:"experiments"`
 }
 
-// Experiment is one fault rule within a Scenario.
+// Experiment is one fault rule within a Scenario. It is expressed in one
+// of two forms: fixture-driven (Failure names a provider-agnostic failure
+// mode, optionally narrowed to one Provider) or raw (an explicit Fault and
+// Match). The two forms are mutually exclusive.
 type Experiment struct {
-	Name        string           `yaml:"name"`
-	Fault       faulttypes.Fault `yaml:"fault"`
-	Match       Match            `yaml:"match"`
+	Name string `yaml:"name"`
+
+	// Failure names a failure mode resolved against the per-provider fixture
+	// catalog at injection time. When set, Fault/Match must be empty.
+	Failure string `yaml:"failure,omitempty"`
+	// Provider narrows a fixture-driven experiment to a single provider id
+	// (e.g. "anthropic"). Empty means every provider that has a fixture for
+	// Failure. Only valid alongside Failure.
+	Provider string `yaml:"provider,omitempty"`
+
+	Fault       faulttypes.Fault `yaml:"fault,omitempty"`
+	Match       Match            `yaml:"match,omitempty"`
 	Probability float64          `yaml:"probability"`
 }
+
+// IsFixtureDriven reports whether the experiment names a failure mode
+// (resolved via the fixture catalog) rather than carrying a raw fault.
+func (e Experiment) IsFixtureDriven() bool { return e.Failure != "" }
+
+var (
+	ErrExperimentMixed      = errors.New("experiment sets both a failure mode and a raw fault/match")
+	ErrProviderNeedsFailure = errors.New("provider is set without a failure mode")
+)
 
 // Match describes which traffic an Experiment applies to.
 type Match struct {
@@ -70,6 +91,19 @@ func (s *Scenario) Validate() error {
 		}
 		if exp.Probability < 0 || exp.Probability > 1 {
 			return fmt.Errorf("scenario %q experiment %q: probability %v outside [0,1]", s.Name, exp.Name, exp.Probability)
+		}
+		if exp.IsFixtureDriven() {
+			// Fixture-driven: the failure mode and provider are resolved
+			// against the fixture catalog at injection time, so a raw
+			// fault/match here is a contradiction. Mode/provider validity is
+			// checked there (this package can't see the provider registry).
+			if exp.Fault.IsHTTP() || exp.Fault.IsSyscall() || exp.Match.IsHTTP() || exp.Match.IsSyscall() {
+				return fmt.Errorf("scenario %q experiment %q: %w", s.Name, exp.Name, ErrExperimentMixed)
+			}
+			continue
+		}
+		if exp.Provider != "" {
+			return fmt.Errorf("scenario %q experiment %q: %w", s.Name, exp.Name, ErrProviderNeedsFailure)
 		}
 		if err := exp.Fault.Validate(); err != nil {
 			return fmt.Errorf("scenario %q experiment %q: %w", s.Name, exp.Name, err)
