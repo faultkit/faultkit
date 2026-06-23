@@ -13,7 +13,7 @@
 
 </div>
 
-> **Status:** v0.1 — five scenarios end-to-end. See [roadmap](#roadmap) for what ships next.
+> **Status:** v0.1 — twelve scenarios end-to-end (LLM, Anthropic-specific, and syscall-level). See [roadmap](#roadmap) for what ships next.
 > **Platforms:** macOS and Linux for HTTP scenarios. Linux 5.8+ (x86-64) for syscall-level scenarios.
 
 ---
@@ -66,13 +66,32 @@ faultkit ships scenarios mapped to real production failure modes. Each one targe
 
 ### LLM and gateway
 
+These are **failure modes** — provider-agnostic recipes. By default they fire
+against every provider faultkit knows (OpenAI, Anthropic); narrow to one with
+`--provider`.
+
 | Scenario | What it does | v0.1 |
 |---|---|:---:|
-| `llm-api-degraded` | Inject 429 / 503 / timeout into requests to OpenAI, Anthropic, Bedrock, Vertex, etc. | ✅ |
+| `llm-api-degraded` | Inject 429 / 503 / timeout into requests to OpenAI and Anthropic | ✅ |
 | `malformed-json-response` | LLM returns 200 OK with syntactically invalid JSON in the body | ✅ |
+| `malformed-tool-use` | Tool call with malformed / schema-violating arguments, breaking dispatch | ✅ |
+| `max-tokens-truncation` | 200 with truncated content (`finish_reason: length` / `stop_reason: max_tokens`) an agent treats as complete | ✅ |
 | `llm-streaming-cutoff` | Drop the SSE connection mid-stream after N tokens | ✅ |
 | `context-window-squeeze` | Silently truncate large prompts at the SDK boundary | 🛣️ |
 | `gateway-timeout` | LiteLLM / Portkey / custom gateway returns slow or hangs | 🛣️ |
+
+### Anthropic-specific
+
+Failure modes Claude surfaces that have no direct OpenAI equivalent, so they
+ship as their own scenarios (Anthropic-only).
+
+| Scenario | What it does | v0.1 |
+|---|---|:---:|
+| `anthropic-overloaded` | HTTP 529 `overloaded_error` under heavy load | ✅ |
+| `anthropic-stream-error` | SSE stream emits an `error` event mid-stream, no `message_stop` terminator | ✅ |
+| `anthropic-tool-use-cutoff` | `tool_use` block truncated by `max_tokens` — an incomplete tool call | ✅ |
+| `anthropic-refusal` | 200 with `stop_reason: "refusal"` — the model declined | ✅ |
+| `anthropic-request-too-large` | HTTP 413 `request_too_large` for an oversized request | ✅ |
 
 ### RAG and vector DB
 
@@ -167,6 +186,29 @@ Run it:
 ```bash
 faultkit run --config nightmare.yaml -- go test ./...
 ```
+
+### Failure modes and providers
+
+The builtin LLM scenarios above aren't written per-provider. They're **failure
+modes** — provider-agnostic recipes whose concrete response shape comes from a
+per-provider fixture. Name a mode and faultkit fans it out across every provider
+it knows:
+
+```yaml
+experiments:
+  - name: rate-limited
+    failure: rate-limited     # the failure mode
+    probability: 0.2          # no `provider:` → fires for OpenAI *and* Anthropic
+```
+
+Narrow it to one provider with the field, or the `--provider` flag at runtime:
+
+```bash
+faultkit run --scenario malformed-json-response --provider anthropic -- pytest tests/
+```
+
+Adding a new provider means adding a fixture, never a new scenario. The raw
+`fault` + `match` form (above) still works for fully custom scenarios.
 
 Schema reference: [docs.faultkit.dev/scenarios](https://faultkit.dev/docs/scenarios).
 
@@ -274,10 +316,11 @@ More CI recipes: [examples/](./examples/).
 
 **Shipped (v0.1)**
 
-- HTTPS proxy injector with `llm-api-degraded`, `malformed-json-response`, `llm-streaming-cutoff`
+- HTTPS proxy injector with the LLM failure modes (`llm-api-degraded`, `malformed-json-response`, `malformed-tool-use`, `max-tokens-truncation`, `llm-streaming-cutoff`)
+- Anthropic-specific scenarios (`anthropic-overloaded`, `anthropic-stream-error`, `anthropic-tool-use-cutoff`, `anthropic-refusal`, `anthropic-request-too-large`)
+- Failure-mode × provider model with `--provider` selection, plus base-URL injection (`--base-url`)
 - eBPF injector with `flaky-network`, `tool-permission-denied`
-- YAML scenario loading
-- Auto-mode selection, `faultkit check`, distinct exit codes
+- YAML scenario loading, auto-mode selection, `faultkit check`, distinct exit codes
 - GitHub Actions integration
 
 **Next (v0.2)**

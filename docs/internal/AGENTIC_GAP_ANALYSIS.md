@@ -4,6 +4,15 @@
 > faultkit's current limits and is based on evaluating a third party's code.
 > The evaluated tool is anonymized here ("the eval target").
 
+> **Update (post-v0.1):** several gaps below are now closed. Base-URL injection
+> (`--base-url`) shipped (Gap A); Anthropic has first-class coverage via the
+> failure-mode × provider model plus dedicated `anthropic-*` scenarios, so Gap C
+> ("streaming-cutoff / malformed-json match only OpenAI") no longer holds; the
+> loud "0 requests intercepted" warning shipped (Gap F). The "provider-agnostic
+> host glob" framing in this note is superseded by the failure-mode × provider
+> fixture model — see [docs/scenarios.md](../scenarios.md#failure-modes-and-providers).
+> The text below is kept as historical context.
+
 ## What we evaluated
 
 faultkit was assessed against **the eval target**: a real-world, production

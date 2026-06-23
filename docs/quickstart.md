@@ -37,15 +37,26 @@ faultkit scenario list
 Output:
 
 ```
-flaky-network            [ebpf]   Inject ECONNRESET on TCP recv, simulating flaky network conditions.
-llm-api-degraded         [proxy]  Inject 429/503/timeout into requests to OpenAI and Anthropic.
-llm-streaming-cutoff     [proxy]  Streaming chat completion drops the connection mid-token without [DONE].
-malformed-json-response  [proxy]  LLM returns 200 OK with syntactically invalid JSON in the body.
-tool-permission-denied   [ebpf]   File operations fail with EACCES (permission denied).
+anthropic-overloaded         [proxy]  Anthropic returns HTTP 529 overloaded_error under heavy load (no OpenAI equivalent).
+anthropic-refusal            [proxy]  Anthropic returns 200 with stop_reason "refusal" — the model declined the request.
+anthropic-request-too-large  [proxy]  Anthropic returns HTTP 413 request_too_large for an oversized request.
+anthropic-stream-error       [proxy]  Anthropic SSE stream emits an error event (overloaded_error) mid-stream, with no message_stop terminator.
+anthropic-tool-use-cutoff    [proxy]  Anthropic returns a tool_use block truncated by max_tokens (stop_reason max_tokens, not tool_use) — the tool call is incomplete.
+flaky-network                [ebpf]   Inject ECONNRESET on TCP recv, simulating flaky network conditions.
+llm-api-degraded             [proxy]  Inject 429/503/timeout into requests to OpenAI and Anthropic.
+llm-streaming-cutoff         [proxy]  Streaming chat completion drops the connection mid-token (OpenAI SSE without [DONE]; Anthropic SSE without message_stop).
+malformed-json-response      [proxy]  LLM returns 200 OK with syntactically invalid JSON in the body.
+malformed-tool-use           [proxy]  LLM returns a tool call with malformed or schema-violating arguments, breaking tool dispatch.
+max-tokens-truncation        [proxy]  LLM returns 200 with truncated content (finish_reason length / stop_reason max_tokens) an agent may treat as complete.
+tool-permission-denied       [ebpf]   File operations fail with EACCES (permission denied).
 ```
 
 The `[proxy]` and `[ebpf]` tags tell you which mechanism the scenario
 needs. Proxy works everywhere; eBPF needs Linux 5.8+.
+
+The LLM scenarios fire against every provider faultkit knows (OpenAI and
+Anthropic); add `--provider anthropic` to narrow to one. The `anthropic-*`
+scenarios are Anthropic-only. See [docs/scenarios.md](./scenarios.md#failure-modes-and-providers).
 
 To see a scenario's full YAML:
 
@@ -127,10 +138,9 @@ Schema reference: [docs/yaml-schema.md](./yaml-schema.md).
 
 ## Worked examples
 
-The repo's [`examples/`](../examples/) directory has five end-to-end
-projects, one per builtin scenario, with both Python and Node.js
-siblings. Each ships an agent with a deliberate bug that surfaces only
-under fault injection.
+The repo's [`examples/`](../examples/) directory has end-to-end projects
+with both Python and Node.js siblings. Each ships an agent with a
+deliberate bug that surfaces only under fault injection.
 
 ```bash
 cd examples/llm-api-degraded
