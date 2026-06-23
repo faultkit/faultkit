@@ -174,13 +174,23 @@ Schema reference: [docs.faultkit.dev/scenarios](https://faultkit.dev/docs/scenar
 
 ## Scenario registry
 
-faultkit supports a local scenario registry: a directory of
-user-authored scenarios you point the binary at via
-`--registry-root <path>` (or `FAULTKIT_REGISTRY_ROOT`).
-The binary never fetches over the network — you `git clone` (or
-`gh repo clone`) the registry first. See [docs/registry.md](docs/registry.md)
-for the model, the resolution rules, the `faultkit validate`
-subcommand, and how to publish your own scenarios.
+faultkit ships an in-repo scenario registry at
+[`scenarios/`](scenarios/). Point the binary at it with
+`--registry-root ./scenarios` (or set `FAULTKIT_REGISTRY_ROOT`).
+
+```bash
+faultkit run \
+  --registry-root ./scenarios \
+  --scenario llm/llm-api-degraded \
+  -- pytest tests/agent/
+```
+
+The binary never fetches over the network. CI runs
+`faultkit validate` on every YAML and regenerates
+`scenarios/INDEX.md` automatically. To add a scenario: drop a YAML
+in the right pack, regenerate the catalog, open a PR. See
+[docs/registry.md](docs/registry.md) for the model, the resolution
+rules, and the `faultkit validate` subcommand.
 
 ---
 

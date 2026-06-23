@@ -330,10 +330,11 @@ for hypothetical scale.
 
 ### Scenario registry
 
-faultkit supports a local scenario registry: a directory of
-user-authored scenarios the user points the binary at via
-`--registry-root <path>` (env: `FAULTKIT_REGISTRY_ROOT`). The
-binary never makes a network call; discovery is local.
+faultkit ships an in-repo scenario registry at `scenarios/` — a
+directory of user-authored YAML files the binary reads locally.
+Point at it with `--registry-root <path>` (env:
+`FAULTKIT_REGISTRY_ROOT`). The binary never makes a network call;
+discovery is local.
 
 The resolution order for `--scenario <name>` is:
 
@@ -342,13 +343,18 @@ The resolution order for `--scenario <name>` is:
 3. Registry root: `<root>/<name>.yaml`, then `<root>/<name>/scenario.yaml`.
 
 The implementation is `pkg/scenario/registry.go` (the `Resolver`
-type). The CLI surface is three additive changes: a new
+type). The CLI surface is four additive changes: a new
 `faultkit validate <file>` subcommand, `--registry-root` on
-`faultkit run`, and `--registry-root` on `faultkit scenario list`.
+`faultkit run`, `--registry-root` on `faultkit scenario list`, and
+the in-repo `scenarios/` directory plus the
+`cmd/scenario-catalog` generator that builds `scenarios/INDEX.md`.
 
 The OSS/Pro seam: the resolver takes a generic path. It does
-not know about any specific registry, the Pro repo, or the
-faultkit-scenarios repo. Pro can extend the seam with private
+not know about any specific registry, the Pro repo, or any
+external registry layout. Pro can extend the seam with private
 registries later; the OSS loader does not change.
 
-The scenario format is the existing YAML schema, unchanged.
+The scenario format is the existing YAML schema, unchanged. The
+catalog is generated from the YAML files by `cmd/scenario-catalog`
+on every CI run; the workflow fails if the committed
+`scenarios/INDEX.md` drifts.
