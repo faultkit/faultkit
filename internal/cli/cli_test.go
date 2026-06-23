@@ -326,3 +326,55 @@ func TestRun_UnknownRegistryScenarioExitsUsage(t *testing.T) {
 		t.Errorf("stderr should mention the unknown scenario name, got %q", stderr)
 	}
 }
+
+func TestScenarioList_RegistryRootExtendsList(t *testing.T) {
+	regDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(regDir, "llm"), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(regDir, "llm", "extra.yaml"), []byte(`
+name: extra-registry-scenario
+description: a registry-only scenario
+experiments:
+  - name: e
+    fault: {http_status: 500}
+    match: {host: a}
+    probability: 0.1
+`), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	code, out, stderr := runCLI(t, "scenario", "list", "--registry-root", regDir)
+	if code != cli.ExitOK {
+		t.Fatalf("code=%d, want %d (stderr=%q)", code, cli.ExitOK, stderr)
+	}
+	for _, want := range []string{"llm-api-degraded", "extra-registry-scenario", "[registry]"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing %q: %q", want, out)
+		}
+	}
+}
+
+func TestScenarioList_NoRegistryRootListsBuiltinsOnly(t *testing.T) {
+	code, out, _ := runCLI(t, "scenario", "list")
+	if code != cli.ExitOK {
+		t.Fatalf("code=%d, want %d", code, cli.ExitOK)
+	}
+	if strings.Contains(out, "[registry]") {
+		t.Errorf("output should not contain [registry] tag when no --registry-root is set: %q", out)
+	}
+	if !strings.Contains(out, "llm-api-degraded") {
+		t.Errorf("output should still list builtins, got %q", out)
+	}
+}
+
+func TestScenarioList_EmptyRegistryRootListsBuiltinsOnly(t *testing.T) {
+	// Explicit --registry-root="" should behave the same as not
+	// setting the flag at all.
+	code, out, _ := runCLI(t, "scenario", "list", "--registry-root", "")
+	if code != cli.ExitOK {
+		t.Fatalf("code=%d, want %d", code, cli.ExitOK)
+	}
+	if strings.Contains(out, "[registry]") {
+		t.Errorf("output should not contain [registry] tag when --registry-root=\"\", got %q", out)
+	}
+}
