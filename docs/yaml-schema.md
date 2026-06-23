@@ -1,8 +1,9 @@
 # Scenario YAML schema
 
 The schema for `--config <file>.yaml` and the embedded builtin
-scenarios. **v0.1 schema is locked**; additions will be additive in
-v0.2+.
+scenarios. The v0.1 schema is stable; the `failure` and `provider`
+experiment fields were added **additively** — every existing scenario
+keeps loading unchanged.
 
 ---
 
@@ -29,26 +30,54 @@ experiments:                    # required, at least one
 
 ## Experiment
 
-Each experiment is one fault rule. Within a scenario they're
-evaluated in YAML order — first match wins.
+Each experiment is one fault rule, written in one of two mutually
+exclusive forms. Within a scenario they're evaluated in YAML order —
+first match wins.
+
+- **Raw** — an explicit `fault` + `match` (full control over any
+  host/path/syscall). Use for custom scenarios.
+- **Fixture-driven** — a named `failure` mode, optionally narrowed to a
+  `provider`, resolved against faultkit's per-provider fixture catalog.
+  Used by the builtin LLM scenarios.
+
+### Raw form
 
 ```yaml
 - name: openai-rate-limited     # required
-  fault:                         # required
+  fault:                         # required (raw form)
     http_status: 429
     response_headers:
       Retry-After: "30"
-  match:                         # required
+  match:                         # required (raw form)
     host: api.openai.com
     path: /v1/chat/completions
   probability: 0.2               # required, 0.0..1.0
 ```
 
+### Fixture-driven form
+
+```yaml
+- name: rate-limited            # required
+  failure: rate-limited          # required (fixture-driven form): a failure-mode id
+  provider: anthropic            # optional: omit to fan out across every provider
+  probability: 0.2               # required, 0.0..1.0
+```
+
+`failure` names a mode in the fixture catalog. At injection time faultkit
+expands it into one concrete experiment per in-scope provider, supplying
+that provider's host, path, and response shape — so you don't hand-write
+them. With `provider` omitted it fans out across every provider that has a
+fixture for the mode; set the field (or pass `--provider` on the CLI) to
+narrow to one. Some modes are provider-specific and have only one fixture
+(e.g. `overloaded` → Anthropic), so they fan out to just that provider.
+
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `name` | string | yes | Free-form identifier; appears in events and reports. |
-| `fault` | object | yes | What to inject. See [Fault](#fault). |
-| `match` | object | yes | When to inject. See [Match](#match). |
+| `failure` | string | fixture-driven | A failure-mode id (e.g. `rate-limited`, `malformed-json`, `streaming-cutoff`). Mutually exclusive with `fault`/`match`. |
+| `provider` | string | no | Restrict a fixture-driven experiment to one provider id (`openai`, `anthropic`). Only valid alongside `failure`. |
+| `fault` | object | raw | What to inject. See [Fault](#fault). |
+| `match` | object | raw | When to inject. See [Match](#match). |
 | `probability` | float | yes | 0.0–1.0 inclusive. Independent dice roll per matched request (proxy) or syscall (eBPF). |
 
 ## Fault
@@ -127,12 +156,18 @@ fail:
 - No experiments.
 - Experiment with empty `name`.
 - `probability` outside [0, 1].
+- An experiment sets both a `failure` mode and a raw `fault`/`match`.
+- `provider` is set without a `failure` mode.
 - `fault` mixes HTTP-level and syscall-level fields.
 - `match` mixes HTTP-level (`host`/`path`) and syscall-level (`syscall`) fields.
 - `match` is empty.
 - `fault` and `match` disagree on level (e.g. HTTP fault with syscall match).
 
 Errors come back as exit code `4` (usage error).
+
+A fixture-driven experiment is additionally checked when the injector
+starts: an unknown `failure` mode, an unknown `provider`, or a provider
+that has no fixture for the mode fails the run with a clear message.
 
 ## Examples
 

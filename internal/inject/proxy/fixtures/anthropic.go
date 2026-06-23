@@ -16,11 +16,12 @@ func anthropicErrorBody(status int) []byte {
 }
 
 var anthropicErrorBodies = map[int][]byte{
-	http.StatusTooManyRequests:     marshalAnthropicError("Number of requests has exceeded your rate limit. Please try again later.", "rate_limit_error"),
-	http.StatusServiceUnavailable:  marshalAnthropicError("The server is temporarily unable to handle requests. Please try again later.", "overloaded_error"),
-	statusOverloaded:               marshalAnthropicError("Overloaded", "overloaded_error"),
-	http.StatusInternalServerError: marshalAnthropicError("Internal server error", "api_error"),
-	http.StatusGatewayTimeout:      marshalAnthropicError("Request timed out", "api_error"),
+	http.StatusTooManyRequests:       marshalAnthropicError("Number of requests has exceeded your rate limit. Please try again later.", "rate_limit_error"),
+	http.StatusServiceUnavailable:    marshalAnthropicError("The server is temporarily unable to handle requests. Please try again later.", "overloaded_error"),
+	statusOverloaded:                 marshalAnthropicError("Overloaded", "overloaded_error"),
+	http.StatusInternalServerError:   marshalAnthropicError("Internal server error", "api_error"),
+	http.StatusGatewayTimeout:        marshalAnthropicError("Request timed out", "api_error"),
+	http.StatusRequestEntityTooLarge: marshalAnthropicError("The request exceeds the maximum allowed size.", "request_too_large"),
 }
 
 func marshalAnthropicError(msg, errType string) []byte {

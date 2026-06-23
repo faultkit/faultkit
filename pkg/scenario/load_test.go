@@ -35,6 +35,23 @@ experiments:
     probability: 0.1
 `
 
+const validFailureYAML = `
+name: my-scenario
+experiments:
+  - name: my-exp
+    failure: malformed-json
+    probability: 0.2
+`
+
+const validFailureProviderYAML = `
+name: my-scenario
+experiments:
+  - name: my-exp
+    failure: rate-limited
+    provider: anthropic
+    probability: 0.2
+`
+
 func TestLoadBytesValid(t *testing.T) {
 	cases := []struct {
 		name string
@@ -43,6 +60,8 @@ func TestLoadBytesValid(t *testing.T) {
 	}{
 		{"http", validHTTPYAML, "my-scenario"},
 		{"syscall", validSyscallYAML, "net-flaky"},
+		{"failure mode", validFailureYAML, "my-scenario"},
+		{"failure mode with provider", validFailureProviderYAML, "my-scenario"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -98,6 +117,16 @@ func TestLoadBytesInvalid(t *testing.T) {
 			name:       "probability out of range",
 			yaml:       "name: bad\nexperiments:\n  - name: x\n    fault: {http_status: 500}\n    match: {host: a}\n    probability: 2.0\n",
 			wantSubstr: "probability",
+		},
+		{
+			name:         "failure and raw fault both set",
+			yaml:         "name: bad\nexperiments:\n  - name: x\n    failure: malformed-json\n    fault: {http_status: 500}\n    match: {host: a}\n    probability: 0.1\n",
+			wantSentinel: scenario.ErrExperimentMixed,
+		},
+		{
+			name:         "provider without failure",
+			yaml:         "name: bad\nexperiments:\n  - name: x\n    fault: {http_status: 500}\n    match: {host: a}\n    provider: anthropic\n    probability: 0.1\n",
+			wantSentinel: scenario.ErrProviderNeedsFailure,
 		},
 	}
 	for _, c := range cases {

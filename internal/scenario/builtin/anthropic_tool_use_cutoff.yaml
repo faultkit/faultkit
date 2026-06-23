@@ -1,0 +1,6 @@
+name: anthropic-tool-use-cutoff
+description: Anthropic returns a tool_use block truncated by max_tokens (stop_reason max_tokens, not tool_use) — the tool call is incomplete.
+experiments:
+  - name: truncated-tool-call
+    failure: tool-use-cutoff
+    probability: 0.15

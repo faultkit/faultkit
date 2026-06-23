@@ -6,6 +6,8 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"slices"
+	"strings"
 	"syscall"
 	"time"
 
@@ -44,14 +46,15 @@ func newRunCmd() *cobra.Command {
 	cmd.Flags().StringVar(&opts.reportPath, "report", "", "write JSON report to path")
 	cmd.Flags().BoolVar(&opts.verbose, "verbose", false, "log injector activity and each fault as it fires")
 	cmd.Flags().BoolVar(&opts.baseURL, "base-url", false, "point the target's SDK at faultkit via *_BASE_URL env (OPENAI_BASE_URL, ANTHROPIC_BASE_URL) instead of HTTPS_PROXY — for clients that ignore proxy env")
+	cmd.Flags().StringVar(&opts.provider, "provider", "", "limit fixture-driven failure modes to one provider (e.g. openai, anthropic); default fans out across all providers")
 	return cmd
 }
 
 type runOpts struct {
-	scenarioName, configPath, mode, reportPath string
-	verbose, baseURL                           bool
-	target                                     []string
-	stdout, stderr                             io.Writer
+	scenarioName, configPath, mode, reportPath, provider string
+	verbose, baseURL                                     bool
+	target                                               []string
+	stdout, stderr                                       io.Writer
 }
 
 func runFaultkit(parentCtx context.Context, o runOpts) error {
@@ -76,7 +79,7 @@ func runFaultkit(parentCtx context.Context, o runOpts) error {
 		return UsageErrorf("missing target command after --")
 	}
 
-	inj, err := pickInjector(s, o.mode, o.baseURL)
+	inj, err := pickInjector(s, o.mode, o.baseURL, o.provider)
 	if err != nil {
 		return err
 	}
@@ -216,7 +219,9 @@ func scenarioMode(s *scenario.Scenario) string {
 
 func experimentKinds(s *scenario.Scenario) (hasHTTP, hasSyscall bool) {
 	for _, exp := range s.Experiments {
-		if exp.Match.IsHTTP() {
+		// Fixture-driven experiments name an HTTP failure mode (resolved to a
+		// provider host at injection time), so they count as HTTP here.
+		if exp.IsFixtureDriven() || exp.Match.IsHTTP() {
 			hasHTTP = true
 		}
 		if exp.Match.IsSyscall() {
@@ -226,16 +231,22 @@ func experimentKinds(s *scenario.Scenario) (hasHTTP, hasSyscall bool) {
 	return hasHTTP, hasSyscall
 }
 
-func pickInjector(s *scenario.Scenario, mode string, baseURL bool) (inject.Injector, error) {
+func pickInjector(s *scenario.Scenario, mode string, baseURL bool, provider string) (inject.Injector, error) {
 	hasHTTP, hasSyscall := experimentKinds(s)
+	if provider != "" && !slices.Contains(proxy.ProviderIDs(), provider) {
+		return nil, UsageErrorf("--provider %q is unknown (known: %s)", provider, strings.Join(proxy.ProviderIDs(), ", "))
+	}
 	switch mode {
 	case modeAuto:
 		switch {
 		case hasHTTP:
-			return newProxyInjector(baseURL), nil
+			return newProxyInjector(baseURL, provider), nil
 		case hasSyscall:
 			if baseURL {
 				return nil, errBaseURLNeedsHTTP
+			}
+			if provider != "" {
+				return nil, errProviderNeedsHTTP
 			}
 			if err := ebpfUnavailableErr(); err != nil {
 				return nil, err
@@ -247,10 +258,13 @@ func pickInjector(s *scenario.Scenario, mode string, baseURL bool) (inject.Injec
 		if !hasHTTP {
 			return nil, UsageErrorf("scenario %q has no HTTP experiments; --mode=proxy is incompatible", s.Name)
 		}
-		return newProxyInjector(baseURL), nil
+		return newProxyInjector(baseURL, provider), nil
 	case modeEBPF:
 		if baseURL {
 			return nil, errBaseURLNeedsHTTP
+		}
+		if provider != "" {
+			return nil, errProviderNeedsHTTP
 		}
 		if !hasSyscall {
 			return nil, UsageErrorf("scenario %q has no syscall experiments; --mode=ebpf is incompatible", s.Name)
@@ -269,12 +283,20 @@ func pickInjector(s *scenario.Scenario, mode string, baseURL bool) (inject.Injec
 // applies to HTTP/proxy traffic.
 var errBaseURLNeedsHTTP = UsageErrorf("--base-url only applies to HTTP scenarios (proxy mode)")
 
+// errProviderNeedsHTTP is returned when --provider is combined with a
+// syscall-only (eBPF) scenario or --mode=ebpf; provider selection only
+// applies to HTTP fixture-driven failure modes.
+var errProviderNeedsHTTP = UsageErrorf("--provider only applies to HTTP scenarios (proxy mode)")
+
 // newProxyInjector builds the proxy injector, switching it into base-URL
-// mode when requested.
-func newProxyInjector(baseURL bool) inject.Injector {
+// mode and/or restricting it to one provider when requested.
+func newProxyInjector(baseURL bool, provider string) inject.Injector {
 	p := proxy.New()
 	if baseURL {
 		p.UseBaseURL(true)
+	}
+	if provider != "" {
+		p.SetProvider(provider)
 	}
 	return p
 }

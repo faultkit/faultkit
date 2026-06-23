@@ -1,0 +1,6 @@
+name: max-tokens-truncation
+description: LLM returns 200 with truncated content (finish_reason length / stop_reason max_tokens) an agent may treat as complete.
+experiments:
+  - name: truncated
+    failure: max-tokens-truncation
+    probability: 0.15

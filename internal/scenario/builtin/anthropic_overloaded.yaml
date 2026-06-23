@@ -1,0 +1,6 @@
+name: anthropic-overloaded
+description: Anthropic returns HTTP 529 overloaded_error under heavy load (no OpenAI equivalent).
+experiments:
+  - name: overloaded
+    failure: overloaded
+    probability: 0.2

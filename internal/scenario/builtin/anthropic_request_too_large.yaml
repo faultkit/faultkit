@@ -1,0 +1,6 @@
+name: anthropic-request-too-large
+description: Anthropic returns HTTP 413 request_too_large for an oversized request.
+experiments:
+  - name: too-large
+    failure: request-too-large
+    probability: 0.2

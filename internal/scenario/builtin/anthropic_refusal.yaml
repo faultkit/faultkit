@@ -1,0 +1,6 @@
+name: anthropic-refusal
+description: Anthropic returns 200 with stop_reason "refusal" — the model declined the request.
+experiments:
+  - name: refusal
+    failure: refusal
+    probability: 0.15

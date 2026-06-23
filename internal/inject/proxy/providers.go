@@ -58,6 +58,26 @@ func (p provider) baseURL(addr string) string {
 	return "http://" + addr + p.pathPrefix + p.apiBase
 }
 
+// providerByID returns the registered provider with the given id.
+func providerByID(id string) (provider, bool) {
+	for _, p := range providerRegistry {
+		if p.id == id {
+			return p, true
+		}
+	}
+	return provider{}, false
+}
+
+// ProviderIDs returns the ids of every registered provider, in registry
+// order. Exported for CLI --provider validation and help text.
+func ProviderIDs() []string {
+	ids := make([]string, len(providerRegistry))
+	for i, p := range providerRegistry {
+		ids[i] = p.id
+	}
+	return ids
+}
+
 // providerForPath resolves an incoming origin-mode request path to its
 // provider and returns the remaining path with the prefix stripped (so
 // the matcher and upstream forwarder see the real API path). ok is false

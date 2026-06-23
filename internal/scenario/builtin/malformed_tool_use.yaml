@@ -1,0 +1,6 @@
+name: malformed-tool-use
+description: LLM returns a tool call with malformed or schema-violating arguments, breaking tool dispatch.
+experiments:
+  - name: bad-tool-args
+    failure: malformed-tool-use
+    probability: 0.15

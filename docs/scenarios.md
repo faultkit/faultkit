@@ -13,19 +13,38 @@ scenarios (v0.2 and beyond), see the bottom of this page.
 
 ## At a glance
 
-v0.1 ships five scenarios. Three use HTTPS proxy injection (LLM and
-gateway failures). Two use eBPF injection (Linux syscall-level
-failures).
+v0.1 ships twelve scenarios. Ten use HTTPS proxy injection (LLM
+failures); two use eBPF injection (Linux syscall-level failures).
+
+**Cross-provider LLM** — fire against OpenAI and Anthropic; narrow with
+`--provider` (see [Failure modes and providers](#failure-modes-and-providers)):
 
 | Scenario | Mode | What it tests |
 |---|---|---|
 | `llm-api-degraded` | proxy | LLM provider returns 429 / 503 / timeout |
 | `malformed-json-response` | proxy | LLM returns syntactically invalid JSON |
+| `malformed-tool-use` | proxy | Tool call with malformed / schema-violating arguments |
+| `max-tokens-truncation` | proxy | Truncated 200 the agent treats as complete |
 | `llm-streaming-cutoff` | proxy | Streaming response drops mid-token |
+
+**Anthropic-specific** — failures Claude surfaces with no OpenAI equivalent:
+
+| Scenario | Mode | What it tests |
+|---|---|---|
+| `anthropic-overloaded` | proxy | HTTP 529 `overloaded_error` |
+| `anthropic-stream-error` | proxy | SSE `error` event mid-stream, no `message_stop` |
+| `anthropic-tool-use-cutoff` | proxy | `tool_use` truncated by `max_tokens` |
+| `anthropic-refusal` | proxy | 200 with `stop_reason: "refusal"` |
+| `anthropic-request-too-large` | proxy | HTTP 413 `request_too_large` |
+
+**Syscall-level** — Linux, eBPF:
+
+| Scenario | Mode | What it tests |
+|---|---|---|
 | `flaky-network` | eBPF | TCP connections drop with `ECONNRESET` |
 | `tool-permission-denied` | eBPF | File operations fail with `EACCES` |
 
-All five are free, open-source, and ship in the v0.1 binary. Run
+All twelve are free, open-source, and ship in the v0.1 binary. Run
 `faultkit scenario list` to see what's available on your installation.
 
 ---
@@ -61,6 +80,38 @@ probability fires roughly 20% of matching requests, with the dice
 rolled fresh each time.
 
 For the full schema reference, see [docs/yaml-schema.md](./yaml-schema.md).
+
+---
+
+## Failure modes and providers
+
+The builtin LLM scenarios aren't written per-provider. Each is a **failure
+mode** — a provider-agnostic recipe — and the concrete response shape (the exact
+body, status, and headers a given SDK parses) comes from a per-provider
+**fixture**. A scenario references a mode by name; faultkit supplies the
+fixtures.
+
+```yaml
+experiments:
+  - name: rate-limited
+    failure: rate-limited     # the failure mode
+    probability: 0.2          # no `provider:` → fires for OpenAI and Anthropic
+```
+
+- **No provider** → the failure runs against every provider that has a fixture
+  for that mode.
+- **A provider** — the `provider:` field, or `--provider` on the CLI — narrows it
+  to one:
+
+  ```bash
+  faultkit run --scenario malformed-json-response --provider anthropic -- pytest tests/
+  ```
+
+The rule is **one scenario, N fixtures**: supporting a new provider means adding
+a fixture, never a new scenario. Failures with no cross-provider equivalent
+(e.g. Anthropic's 529 `overloaded_error`) ship as their own scenarios — they're
+just modes with a single-provider fixture. Raw `fault` + `match` scenarios
+(custom hosts and paths) are unaffected and behave exactly as before.
 
 ---
 
@@ -257,6 +308,77 @@ error.
 
 ---
 
+### `malformed-tool-use`
+
+The model returns a tool call the agent can't act on: for OpenAI the
+`function.arguments` string is itself invalid JSON; for Anthropic the `tool_use`
+block's `input` violates the tool's schema. It's a 200 — the SDK doesn't
+complain — so the failure only bites when the agent parses or dispatches the call.
+
+**What it tests:** JSON-parse and schema-validation guards around tool dispatch;
+telling "the model emitted a bad call" apart from "the tool failed".
+
+---
+
+### `max-tokens-truncation`
+
+A 200 whose content is valid but truncated, flagged only by
+`finish_reason: "length"` (OpenAI) / `stop_reason: "max_tokens"` (Anthropic). An
+agent that consumes the content without checking the finish/stop reason treats a
+half-answer as complete.
+
+**What it tests:** checking the finish/stop reason before using output;
+continuation or retry on truncation.
+
+---
+
+## Anthropic-specific scenarios
+
+Failures Claude surfaces that have no direct OpenAI equivalent, so each ships as
+its own scenario (Anthropic-only). All are fixture-driven — see
+[Failure modes and providers](#failure-modes-and-providers).
+
+### `anthropic-overloaded`
+
+HTTP **529 `overloaded_error`** — Anthropic's "overloaded, try again" under load.
+OpenAI never returns 529, so retry/back-off logic that only special-cases
+429/503 sails right past it.
+
+**What it tests:** that your retry classifier treats 529 as retryable.
+
+### `anthropic-stream-error`
+
+A well-formed SSE stream that emits an **`event: error`** (overloaded_error)
+partway through and then stops — *no* `message_stop`. The bytes are clean, so a
+consumer that equates "stream ended" with "success" misses the error.
+
+**What it tests:** that you parse SSE `error` events, not just `message_stop`.
+
+### `anthropic-tool-use-cutoff`
+
+A `tool_use` block whose turn was cut off by the token limit: `stop_reason` is
+**`max_tokens`**, not `tool_use`. The tool call is incomplete and must not be
+dispatched.
+
+**What it tests:** checking `stop_reason` before acting on a `tool_use` block.
+
+### `anthropic-refusal`
+
+A 200 with **`stop_reason: "refusal"`** — the model declined. The body is a valid
+200 with little or no usable content, so code that treats 200 as "answer" stores
+blanks or retries a request that will keep being refused.
+
+**What it tests:** branching on `stop_reason`; not retrying a refusal.
+
+### `anthropic-request-too-large`
+
+HTTP **413 `request_too_large`** for an oversized request.
+
+**What it tests:** oversized-prompt handling — chunking or graceful failure
+rather than an unhandled 413.
+
+---
+
 ## eBPF scenarios
 
 These scenarios use faultkit's eBPF injector. Small kernel programs
@@ -402,12 +524,11 @@ experiments:
       host: "api.anthropic.com"
     probability: 0.05
 
-  - name: "tcp resets on database connections"
+  - name: "tcp resets on backend recv"
     fault:
       errno: ECONNRESET
     match:
       syscall: recvmsg
-      port: 5432
     probability: 0.02
 ```
 
@@ -426,13 +547,27 @@ faultkit run --config production-bad-day.yaml -- pytest tests/
 The following scenarios are planned for v0.2. They aren't shipping in
 v0.1 but are tracked as open issues and welcome contribution:
 
-| Scenario | Mode | What it will test |
+Sequenced by the capability each needs (new LLM fixtures first, then a
+latency/hang primitive, then RAG providers, then the eBPF/shim subprocess
+track):
+
+| Scenario | Mechanism | What it will test |
 |---|---|---|
-| `tool-call-flaky` | eBPF | Subprocess `SIGPIPE` and short reads |
-| `rag-corruption` | proxy | Vector DB returns shuffled or stale results |
-| `context-window-squeeze` | proxy | Silent prompt truncation at the SDK boundary |
+| `llm-empty-response` | proxy | 200 with empty / null content (guardrail-triggered) |
+| `llm-slow-first-token` | proxy | 8–15s before the first streamed token |
+| `context-window-overflow` | proxy | Outbound prompt silently truncated at the SDK boundary |
+| `gateway-timeout` | proxy | LiteLLM / Portkey / gateway returns slow or hangs |
+| `rag-stale-results` | proxy | Vector DB returns stale or deleted-document results |
+| `embeddings-degraded` | proxy | Embeddings endpoint returns 5xx intermittently |
+| `mcp-tool-schema-mismatch` | proxy | MCP result doesn't match its declared schema |
+| `subagent-timeout` | proxy | A subagent tool call never returns |
+| `memory-write-failure` | proxy / eBPF | Agent state write silently fails; next step reads stale |
+| `tool-call-flaky` | eBPF / shim | Truncated stdout, exit 0 — partial data, no error raised |
+| `partial-tool-result` | eBPF / shim | Valid-but-incomplete tool result, exit 0 |
+| `tool-slow` | eBPF / shim | Subprocess hangs for N seconds |
 | `disk-full` | eBPF | `ENOSPC` after N bytes written |
-| `slow-dns` | eBPF | `getaddrinfo` returns slowly or with `EAI_AGAIN` |
+| `fd-exhaustion` | eBPF | `EMFILE` after N open descriptors |
+| `slow-dns` | eBPF / shim | `getaddrinfo` slow or `EAI_AGAIN` |
 
 If you want to contribute one of these (or propose a new scenario),
 see [CONTRIBUTING.md](../CONTRIBUTING.md).

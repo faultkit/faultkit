@@ -133,6 +133,26 @@ func TestRunTargetFailsExitsTargetFailed(t *testing.T) {
 	}
 }
 
+func TestRunUnknownProviderExitsUsage(t *testing.T) {
+	code, _, stderr := runCLI(t, "run", "--scenario", "llm-api-degraded", "--provider", "bogus", "--", "true")
+	if code != cli.ExitUsage {
+		t.Fatalf("code=%d, want %d (stderr=%q)", code, cli.ExitUsage, stderr)
+	}
+	if !strings.Contains(stderr, "known:") {
+		t.Errorf("stderr should list known providers: %q", stderr)
+	}
+}
+
+func TestRunProviderOnSyscallScenarioRejected(t *testing.T) {
+	code, _, stderr := runCLI(t, "run", "--scenario", "flaky-network", "--provider", "openai", "--", "true")
+	if code != cli.ExitUsage {
+		t.Fatalf("code=%d, want %d (stderr=%q)", code, cli.ExitUsage, stderr)
+	}
+	if !strings.Contains(stderr, "HTTP") {
+		t.Errorf("stderr should explain --provider is HTTP-only: %q", stderr)
+	}
+}
+
 func TestRunModeEBPFOnHTTPScenarioRejected(t *testing.T) {
 	code, _, stderr := runCLI(t, "run",
 		"--scenario", "llm-api-degraded",
