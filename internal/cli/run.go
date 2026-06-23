@@ -32,14 +32,22 @@ func newRunCmd() *cobra.Command {
 		Short: "Run a target command under fault injection",
 		Args:  cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// --registry-root falls back to FAULTKIT_REGISTRY_ROOT
+			// when the user did not pass the flag on the command line.
+			if !cmd.Flags().Changed("registry-root") {
+				if env := os.Getenv("FAULTKIT_REGISTRY_ROOT"); env != "" {
+					opts.registryRoot = env
+				}
+			}
 			opts.target = args
 			opts.stdout = cmd.OutOrStdout()
 			opts.stderr = cmd.ErrOrStderr()
 			return runFaultkit(cmd.Context(), opts)
 		},
 	}
-	cmd.Flags().StringVar(&opts.scenarioName, "scenario", "", "builtin scenario name")
+	cmd.Flags().StringVar(&opts.scenarioName, "scenario", "", "builtin scenario name (e.g. llm-api-degraded), registry path (e.g. llm/api-degraded), or filesystem path ending in .yaml")
 	cmd.Flags().StringVar(&opts.configPath, "config", "", "scenario YAML file")
+	cmd.Flags().StringVar(&opts.registryRoot, "registry-root", "", "directory of a local scenario registry clone (env: FAULTKIT_REGISTRY_ROOT)")
 	cmd.Flags().StringVar(&opts.mode, "mode", modeAuto, "injection mode: auto, proxy, ebpf")
 	cmd.Flags().StringVar(&opts.reportPath, "report", "", "write JSON report to path")
 	cmd.Flags().BoolVar(&opts.verbose, "verbose", false, "log injector activity and each fault as it fires")
@@ -48,10 +56,10 @@ func newRunCmd() *cobra.Command {
 }
 
 type runOpts struct {
-	scenarioName, configPath, mode, reportPath string
-	verbose, baseURL                           bool
-	target                                     []string
-	stdout, stderr                             io.Writer
+	scenarioName, configPath, mode, reportPath, registryRoot string
+	verbose, baseURL                                         bool
+	target                                                   []string
+	stdout, stderr                                           io.Writer
 }
 
 func runFaultkit(parentCtx context.Context, o runOpts) error {
@@ -179,25 +187,38 @@ func warnNoTrafficReached(o runOpts) {
 		"HTTPS_PROXY (common with Node fetch/undici and subprocess SDKs). For SDK clients, try --base-url.")
 }
 
+// loadScenario resolves the scenario the user asked for using a
+// fixed search order: filesystem path (via --config or a
+// scenario name that contains a separator or ends in .yaml),
+// then a registered builtin, then the --registry root. A miss
+// returns ExitUsage (4) so CI scripts can distinguish a user
+// typo from a faultkit-internal failure.
 func loadScenario(o runOpts) (*scenario.Scenario, error) {
-	switch {
-	case o.scenarioName != "" && o.configPath != "":
+	if o.scenarioName != "" && o.configPath != "" {
 		return nil, UsageErrorf("--scenario and --config are mutually exclusive")
-	case o.scenarioName != "":
-		s, err := scenario.LoadBuiltin(o.scenarioName)
-		if err != nil {
-			return nil, UsageErrorf("%w", err)
-		}
-		return s, nil
-	case o.configPath != "":
+	}
+
+	// --config is the explicit path form. Resolve via the same
+	// resolver so the file-loading path is uniform, but pass the
+	// path directly to keep the user-given string authoritative.
+	if o.configPath != "" {
 		s, err := scenario.Load(o.configPath)
 		if err != nil {
 			return nil, UsageErrorf("%w", err)
 		}
 		return s, nil
-	default:
+	}
+
+	if o.scenarioName == "" {
 		return nil, UsageErrorf("either --scenario or --config is required")
 	}
+
+	r := scenario.NewResolver(o.registryRoot)
+	s, err := r.Resolve(o.scenarioName)
+	if err != nil {
+		return nil, UsageErrorf("%w", err)
+	}
+	return s, nil
 }
 
 // scenarioMode returns the injection mode a scenario maps to in --auto:

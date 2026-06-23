@@ -257,3 +257,72 @@ func TestValidate_NoArgsExitsUsage(t *testing.T) {
 		t.Fatalf("code=%d, want %d", code, cli.ExitUsage)
 	}
 }
+
+func TestRun_RegistryRootSingleFileScenario(t *testing.T) {
+	// A scenario that lives only in the registry root resolves via
+	// --registry-root. We use an HTTP-fault scenario so the runner
+	// can pick the proxy injector; the fault-not-fired exit code is
+	// the proxy path's expected outcome against a no-op target.
+	regDir := t.TempDir()
+	yamlPath := filepath.Join(regDir, "reg", "scenario.yaml")
+	if err := os.MkdirAll(filepath.Dir(yamlPath), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	body := []byte(`
+name: reg-scenario
+description: registry test
+experiments:
+  - name: e
+    fault: {http_status: 500}
+    match: {host: example.test}
+    probability: 0.1
+`)
+	if err := os.WriteFile(yamlPath, body, 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	// FaultNotFired (3) is a successful run path; what we're testing
+	// is that the scenario was found, not that the fault fired.
+	code, _, _ := runCLI(t, "run",
+		"--registry-root", regDir,
+		"--scenario", "reg/scenario",
+		"--", "true")
+	if code != cli.ExitFaultNotFired && code != cli.ExitTargetFailed {
+		t.Fatalf("code=%d, want ExitFaultNotFired (3) or ExitTargetFailed (1)", code)
+	}
+}
+
+func TestRun_RegistryRootEnvVar(t *testing.T) {
+	regDir := t.TempDir()
+	yamlPath := filepath.Join(regDir, "reg-env.yaml")
+	if err := os.WriteFile(yamlPath, []byte(`
+name: reg-env
+experiments:
+  - name: e
+    fault: {http_status: 500}
+    match: {host: example.test}
+    probability: 0.1
+`), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	t.Setenv("FAULTKIT_REGISTRY_ROOT", regDir)
+	code, _, stderr := runCLI(t, "run",
+		"--scenario", "reg-env",
+		"--", "true")
+	if code != cli.ExitFaultNotFired && code != cli.ExitTargetFailed {
+		t.Fatalf("code=%d, want ExitFaultNotFired (3) or ExitTargetFailed (1) (stderr=%q)", code, stderr)
+	}
+}
+
+func TestRun_UnknownRegistryScenarioExitsUsage(t *testing.T) {
+	regDir := t.TempDir()
+	code, _, stderr := runCLI(t, "run",
+		"--registry-root", regDir,
+		"--scenario", "no-such-scenario",
+		"--", "true")
+	if code != cli.ExitUsage {
+		t.Fatalf("code=%d, want %d (stderr=%q)", code, cli.ExitUsage, stderr)
+	}
+	if !strings.Contains(stderr, "no-such-scenario") {
+		t.Errorf("stderr should mention the unknown scenario name, got %q", stderr)
+	}
+}
