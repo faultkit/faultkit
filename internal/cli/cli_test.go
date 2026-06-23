@@ -2,6 +2,8 @@ package cli_test
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -204,5 +206,54 @@ func TestRunModeProxyOnSyscallScenarioRejected(t *testing.T) {
 	)
 	if code != cli.ExitUsage {
 		t.Fatalf("code=%d, want %d (stderr=%q)", code, cli.ExitUsage, stderr)
+	}
+}
+
+func TestValidate_AcceptsBuiltInShape(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "ok.yaml")
+	body := []byte(`
+name: my-scenario
+experiments:
+  - name: e
+    fault: {http_status: 500}
+    match: {host: a}
+    probability: 0.1
+`)
+	if err := os.WriteFile(path, body, 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	code, _, stderr := runCLI(t, "validate", path)
+	if code != cli.ExitOK {
+		t.Fatalf("code=%d, want %d (stderr=%q)", code, cli.ExitOK, stderr)
+	}
+}
+
+func TestValidate_RejectsInvalidYAML(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "bad.yaml")
+	if err := os.WriteFile(path, []byte("not: : valid:::\n  - syntax"), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	code, _, stderr := runCLI(t, "validate", path)
+	if code != cli.ExitUsage {
+		t.Fatalf("code=%d, want %d (stderr=%q)", code, cli.ExitUsage, stderr)
+	}
+	if !strings.Contains(stderr, "kebab-case") && !strings.Contains(stderr, "no experiments") && !strings.Contains(stderr, "parsing scenario yaml") {
+		t.Errorf("stderr should explain the validation failure, got %q", stderr)
+	}
+}
+
+func TestValidate_MissingFileExitsUsage(t *testing.T) {
+	code, _, _ := runCLI(t, "validate", "/nonexistent/path/missing.yaml")
+	if code != cli.ExitUsage {
+		t.Fatalf("code=%d, want %d", code, cli.ExitUsage)
+	}
+}
+
+func TestValidate_NoArgsExitsUsage(t *testing.T) {
+	code, _, _ := runCLI(t, "validate")
+	if code != cli.ExitUsage {
+		t.Fatalf("code=%d, want %d", code, cli.ExitUsage)
 	}
 }
