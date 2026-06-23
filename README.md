@@ -77,7 +77,9 @@ against every provider faultkit knows (OpenAI, Anthropic); narrow to one with
 | `malformed-tool-use` | Tool call with malformed / schema-violating arguments, breaking dispatch | ✅ |
 | `max-tokens-truncation` | 200 with truncated content (`finish_reason: length` / `stop_reason: max_tokens`) an agent treats as complete | ✅ |
 | `llm-streaming-cutoff` | Drop the SSE connection mid-stream after N tokens | ✅ |
-| `context-window-squeeze` | Silently truncate large prompts at the SDK boundary | 🛣️ |
+| `llm-empty-response` | 200 OK, valid JSON, content is an empty string / null (guardrail-triggered) | 🛣️ |
+| `llm-slow-first-token` | Connection accepted, then 8–15s before the first token | 🛣️ |
+| `context-window-overflow` | Silently truncate the prompt at the SDK boundary | 🛣️ |
 | `gateway-timeout` | LiteLLM / Portkey / custom gateway returns slow or hangs | 🛣️ |
 
 ### Anthropic-specific
@@ -97,7 +99,7 @@ ship as their own scenarios (Anthropic-only).
 
 | Scenario | What it does | v0.1 |
 |---|---|:---:|
-| `rag-corruption` | Pinecone / Weaviate / Qdrant returns stale or shuffled results | 🛣️ |
+| `rag-stale-results` | Pinecone / Weaviate / Qdrant returns stale or deleted-document results | 🛣️ |
 | `embeddings-degraded` | Embeddings endpoint returns 5xx intermittently | 🛣️ |
 
 ### Tool calls and subprocesses
@@ -105,8 +107,17 @@ ship as their own scenarios (Anthropic-only).
 | Scenario | What it does | v0.1 |
 |---|---|:---:|
 | `tool-permission-denied` | `EACCES` / `EPERM` on the agent's file or path access | ✅ |
-| `tool-call-flaky` | Subprocess gets `SIGPIPE`, OOM-killed, or returns truncated stdout | 🛣️ |
+| `tool-call-flaky` | Subprocess returns truncated stdout with exit 0 — agent reasons on partial data | 🛣️ |
+| `partial-tool-result` | Tool returns a valid-but-incomplete result (half a JSON array), exit 0 | 🛣️ |
 | `tool-slow` | Subprocess hangs for N seconds, exposes timeout-handling bugs | 🛣️ |
+
+### Agent orchestration and MCP
+
+| Scenario | What it does | v0.1 |
+|---|---|:---:|
+| `mcp-tool-schema-mismatch` | MCP server returns a result that doesn't match its declared schema | 🛣️ |
+| `subagent-timeout` | A subagent tool call never returns — tests the orchestration ceiling | 🛣️ |
+| `memory-write-failure` | Agent state write silently fails; the next step reads stale state | 🛣️ |
 
 ### Backend classics
 
@@ -323,12 +334,14 @@ More CI recipes: [examples/](./examples/).
 - YAML scenario loading, auto-mode selection, `faultkit check`, distinct exit codes
 - GitHub Actions integration
 
-**Next (v0.2)**
+**Next (v0.2)** — the 🛣️ items in [Scenarios](#scenarios), sequenced by capability
 
-- LD_PRELOAD / DYLD shim mode
-- More tool-call scenarios (`tool-call-flaky`, `tool-slow`)
-- RAG / embeddings scenarios (`rag-corruption`, `embeddings-degraded`)
-- More backend scenarios (`disk-full`, `slow-dns`, `fd-exhaustion`)
+- New LLM failure modes: `llm-empty-response`, `llm-slow-first-token`, `context-window-overflow`
+- A latency / hang fault primitive (powers `tool-slow`, `gateway-timeout`, `subagent-timeout`, `slow-dns`)
+- RAG / vector-DB scenarios: `rag-stale-results`, `embeddings-degraded`
+- Agent-orchestration scenarios: `mcp-tool-schema-mismatch`, `subagent-timeout`, `memory-write-failure`
+- Subprocess stdout faults (`tool-call-flaky`, `partial-tool-result`) via the LD_PRELOAD / DYLD shim
+- More backend syscall scenarios: `disk-full`, `fd-exhaustion`
 
 **Later (v0.3+)**
 

@@ -547,13 +547,27 @@ faultkit run --config production-bad-day.yaml -- pytest tests/
 The following scenarios are planned for v0.2. They aren't shipping in
 v0.1 but are tracked as open issues and welcome contribution:
 
-| Scenario | Mode | What it will test |
+Sequenced by the capability each needs (new LLM fixtures first, then a
+latency/hang primitive, then RAG providers, then the eBPF/shim subprocess
+track):
+
+| Scenario | Mechanism | What it will test |
 |---|---|---|
-| `tool-call-flaky` | eBPF | Subprocess `SIGPIPE` and short reads |
-| `rag-corruption` | proxy | Vector DB returns shuffled or stale results |
-| `context-window-squeeze` | proxy | Silent prompt truncation at the SDK boundary |
+| `llm-empty-response` | proxy | 200 with empty / null content (guardrail-triggered) |
+| `llm-slow-first-token` | proxy | 8–15s before the first streamed token |
+| `context-window-overflow` | proxy | Outbound prompt silently truncated at the SDK boundary |
+| `gateway-timeout` | proxy | LiteLLM / Portkey / gateway returns slow or hangs |
+| `rag-stale-results` | proxy | Vector DB returns stale or deleted-document results |
+| `embeddings-degraded` | proxy | Embeddings endpoint returns 5xx intermittently |
+| `mcp-tool-schema-mismatch` | proxy | MCP result doesn't match its declared schema |
+| `subagent-timeout` | proxy | A subagent tool call never returns |
+| `memory-write-failure` | proxy / eBPF | Agent state write silently fails; next step reads stale |
+| `tool-call-flaky` | eBPF / shim | Truncated stdout, exit 0 — partial data, no error raised |
+| `partial-tool-result` | eBPF / shim | Valid-but-incomplete tool result, exit 0 |
+| `tool-slow` | eBPF / shim | Subprocess hangs for N seconds |
 | `disk-full` | eBPF | `ENOSPC` after N bytes written |
-| `slow-dns` | eBPF | `getaddrinfo` returns slowly or with `EAI_AGAIN` |
+| `fd-exhaustion` | eBPF | `EMFILE` after N open descriptors |
+| `slow-dns` | eBPF / shim | `getaddrinfo` slow or `EAI_AGAIN` |
 
 If you want to contribute one of these (or propose a new scenario),
 see [CONTRIBUTING.md](../CONTRIBUTING.md).
