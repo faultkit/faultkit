@@ -11,10 +11,13 @@ import (
 func TestBuiltinsLoadable(t *testing.T) {
 	got := scenario.BuiltinNames()
 	for _, want := range []string{
+		"anthropic-overloaded",
 		"flaky-network",
 		"llm-api-degraded",
 		"llm-streaming-cutoff",
 		"malformed-json-response",
+		"malformed-tool-use",
+		"max-tokens-truncation",
 		"tool-permission-denied",
 	} {
 		if !slices.Contains(got, want) {
