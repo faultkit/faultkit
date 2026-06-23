@@ -46,6 +46,19 @@ var catalog = map[string]map[string]Fixture{
 		"openai":    {Path: "/v1/chat/completions", Status: 200, Body: openAIMalformedToolUse},
 		"anthropic": {Path: "/v1/messages", Status: 200, Body: anthropicMalformedToolUse},
 	},
+	// Anthropic-distinctive modes (no cross-provider equivalent yet).
+	"stream-error": {
+		"anthropic": {Path: "/v1/messages", Status: 200, Headers: map[string]string{"Content-Type": "text/event-stream"}, Body: anthropicStreamError},
+	},
+	"tool-use-cutoff": {
+		"anthropic": {Path: "/v1/messages", Status: 200, Body: anthropicToolUseCutoff},
+	},
+	"refusal": {
+		"anthropic": {Path: "/v1/messages", Status: 200, Body: anthropicRefusal},
+	},
+	"request-too-large": {
+		"anthropic": {Path: "/v1/*", Status: 413},
+	},
 }
 
 // For returns the fixture for (mode, provider) and whether one exists.
@@ -99,3 +112,33 @@ const (
 	openAIMalformedToolUse    = `{"id":"chatcmpl-test","object":"chat.completion","model":"gpt-4o-mini","choices":[{"index":0,"message":{"role":"assistant","content":null,"tool_calls":[{"id":"call_1","type":"function","function":{"name":"lookup_user","arguments":"{\"id\": 42,}"}}]},"finish_reason":"tool_calls"}]}`
 	anthropicMalformedToolUse = `{"id":"msg_test","type":"message","role":"assistant","model":"claude-sonnet-4","content":[{"type":"tool_use","id":"toolu_1","name":"lookup_user","input":{"id":"not-an-integer"}}],"stop_reason":"tool_use","usage":{"input_tokens":10,"output_tokens":8}}`
 )
+
+// anthropicStreamError is a well-formed Anthropic SSE stream that emits an
+// `event: error` (overloaded_error) partway through and then stops — no
+// `message_stop`. Tests whether the consumer parses SSE error events instead
+// of treating the byte-clean stream end as a successful completion.
+const anthropicStreamError = `event: message_start
+data: {"type":"message_start","message":{"id":"msg_test","type":"message","role":"assistant","model":"claude-sonnet-4","content":[],"stop_reason":null,"usage":{"input_tokens":10,"output_tokens":0}}}
+
+event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"The answer "}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"is"}}
+
+event: error
+data: {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}
+
+`
+
+// anthropicToolUseCutoff is a valid envelope carrying a tool_use block whose
+// turn was truncated: stop_reason is "max_tokens" (not "tool_use"), so the tool
+// call is incomplete and must NOT be dispatched.
+const anthropicToolUseCutoff = `{"id":"msg_test","type":"message","role":"assistant","model":"claude-sonnet-4","content":[{"type":"tool_use","id":"toolu_1","name":"lookup_user","input":{"id":42}}],"stop_reason":"max_tokens","usage":{"input_tokens":10,"output_tokens":16}}`
+
+// anthropicRefusal is a 200 whose stop_reason is "refusal" — the model declined.
+// Agents should treat this distinctly from a normal completion.
+const anthropicRefusal = `{"id":"msg_test","type":"message","role":"assistant","model":"claude-sonnet-4","content":[{"type":"text","text":"I can't help with that request."}],"stop_reason":"refusal","usage":{"input_tokens":10,"output_tokens":8}}`

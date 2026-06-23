@@ -1,0 +1,6 @@
+name: anthropic-stream-error
+description: Anthropic SSE stream emits an error event (overloaded_error) mid-stream, with no message_stop terminator.
+experiments:
+  - name: mid-stream-error
+    failure: stream-error
+    probability: 0.1

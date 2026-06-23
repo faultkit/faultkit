@@ -15,6 +15,10 @@ func TestExpandNewBuiltins(t *testing.T) {
 		wantProviders []string
 	}{
 		{"anthropic-overloaded", []string{"api.anthropic.com"}},
+		{"anthropic-stream-error", []string{"api.anthropic.com"}},
+		{"anthropic-tool-use-cutoff", []string{"api.anthropic.com"}},
+		{"anthropic-refusal", []string{"api.anthropic.com"}},
+		{"anthropic-request-too-large", []string{"api.anthropic.com"}},
 		{"max-tokens-truncation", []string{"api.openai.com", "api.anthropic.com"}},
 		{"malformed-tool-use", []string{"api.openai.com", "api.anthropic.com"}},
 	}
