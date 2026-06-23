@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: Apache-2.0
+name: tool-slow
+description: Subprocess hangs for N seconds, exposing timeout-handling bugs in tool orchestration.
+requires:
+  platform: linux
+  kernel_min: "5.8"
+experiments:
+  - name: recv-hang
+    fault:
+      errno: ETIMEDOUT
+    match:
+      syscall: recvmsg
+    probability: 0.1

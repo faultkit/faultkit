@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: Apache-2.0
+name: disk-full
+description: Writes fail with ENOSPC after N bytes, exposing disk-space error handling bugs.
+requires:
+  platform: linux
+  kernel_min: "5.8"
+experiments:
+  - name: write-enospc
+    fault:
+      errno: ENOSPC
+    match:
+      syscall: write
+    probability: 0.1

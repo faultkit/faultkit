@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: Apache-2.0
+name: context-window-squeeze
+description: Silently truncate large prompts at the SDK boundary, simulating silent context-window overflow.
+experiments:
+  - name: truncate-prompt
+    fault:
+      http_status: 200
+      response_body: |
+        {"id":"chatcmpl-test","object":"chat.completion","model":"gpt-4o-mini","choices":[{"index":0,"message":{"role":"assistant","content":"I notice the prompt was cut off mid-sentence. Could you provide the rest?"},"finish_reason":"stop"}]}
+    match:
+      host: api.openai.com
+      path: /v1/chat/completions
+    probability: 0.1

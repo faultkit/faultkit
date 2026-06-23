@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: Apache-2.0
+name: fd-exhaustion
+description: open() returns EMFILE after N open descriptors, exposing file-descriptor-leak bugs.
+requires:
+  platform: linux
+  kernel_min: "5.8"
+experiments:
+  - name: openat-emfile
+    fault:
+      errno: EMFILE
+    match:
+      syscall: openat
+    probability: 0.1

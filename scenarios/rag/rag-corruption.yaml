@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: Apache-2.0
+name: rag-corruption
+description: Vector DB returns stale or shuffled results, simulating retrieval-augmented generation going wrong.
+experiments:
+  - name: shuffled-results
+    fault:
+      http_status: 200
+      response_body: |
+        {"results":[{"id":"doc-3","score":0.91,"text":"unrelated content from doc 3"},{"id":"doc-7","score":0.85,"text":"unrelated content from doc 7"}]}
+    match:
+      host: "*.pinecone.io"
+      path: /query
+    probability: 0.15
+  - name: stale-results
+    fault:
+      http_status: 200
+      response_body: |
+        {"results":[{"id":"doc-old","score":0.95,"text":"stale snapshot from 6 months ago"}]}
+    match:
+      host: "*.qdrant.io"
+      path: /collections/*/points/search
+    probability: 0.1

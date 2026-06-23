@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: Apache-2.0
+name: tool-permission-denied
+description: File operations fail with EACCES (permission denied).
+requires:
+  platform: linux
+  kernel_min: "5.8"
+experiments:
+  - name: openat-eacces
+    fault:
+      errno: EACCES
+    match:
+      syscall: openat
+    probability: 0.05

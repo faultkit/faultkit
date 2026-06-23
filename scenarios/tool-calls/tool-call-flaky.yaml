@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: Apache-2.0
+name: tool-call-flaky
+description: Subprocess gets SIGPIPE / short read / OOM-killed, exposing tool-call resilience bugs.
+requires:
+  platform: linux
+  kernel_min: "5.8"
+experiments:
+  - name: short-read-stdout
+    fault:
+      errno: EIO
+    match:
+      syscall: read
+    probability: 0.05
+  - name: sigpipe-on-write
+    fault:
+      errno: EPIPE
+    match:
+      syscall: write
+    probability: 0.05

@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: Apache-2.0
+name: embeddings-degraded
+description: Embeddings endpoint returns 5xx intermittently, breaking the RAG indexing pipeline.
+experiments:
+  - name: embeddings-503
+    fault:
+      http_status: 503
+      response_headers:
+        Retry-After: "5"
+    match:
+      host: api.openai.com
+      path: /v1/embeddings
+    probability: 0.2
+  - name: embeddings-500
+    fault:
+      http_status: 500
+    match:
+      host: api.openai.com
+      path: /v1/embeddings
+    probability: 0.1

@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: Apache-2.0
+name: slow-dns
+description: DNS resolution is delayed 500-5000ms with intermittent EAI_AGAIN, exposing DNS-timeout bugs.
+requires:
+  platform: linux
+  kernel_min: "5.8"
+experiments:
+  - name: getaddrinfo-eai-again
+    fault:
+      errno: EAGAIN
+    match:
+      syscall: getaddrinfo
+    probability: 0.1
