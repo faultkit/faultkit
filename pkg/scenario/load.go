@@ -85,3 +85,12 @@ func BuiltinYAML(name string) ([]byte, error) {
 	}
 	return b.raw, nil
 }
+
+// UsageError reports that a Resolver lookup failed because the caller's
+// input was wrong (unknown name, missing file, etc.). The CLI maps this
+// to ExitUsage (4) so CI scripts can distinguish a user typo from an
+// internal fault.
+type UsageError struct{ err error }
+
+func (e *UsageError) Error() string { return e.err.Error() }
+func (e *UsageError) Unwrap() error { return e.err }
