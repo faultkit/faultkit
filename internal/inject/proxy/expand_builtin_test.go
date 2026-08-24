@@ -18,7 +18,7 @@ func TestExpandBuiltinsParity(t *testing.T) {
 		wantStatus int // 0 = streaming-cutoff (no status)
 	}{
 		{"llm-api-degraded", map[string]string{"api.openai.com": "/v1/*", "api.anthropic.com": "/v1/*", "bedrock-runtime.*.amazonaws.com": "/model/*"}, 429},
-		{"malformed-json-response", map[string]string{"api.openai.com": "/v1/chat/completions", "api.anthropic.com": "/v1/messages"}, 200},
+		{"malformed-json-response", map[string]string{"api.openai.com": "/v1/chat/completions", "api.anthropic.com": "/v1/messages", "bedrock-runtime.*.amazonaws.com": "/model/*/converse"}, 200},
 		{"llm-streaming-cutoff", map[string]string{"api.openai.com": "/v1/chat/completions", "api.anthropic.com": "/v1/messages"}, 0},
 	}
 	for _, c := range cases {
@@ -116,8 +116,8 @@ func TestExpandNewBuiltins(t *testing.T) {
 		{"anthropic-tool-use-cutoff", []string{"api.anthropic.com"}},
 		{"anthropic-refusal", []string{"api.anthropic.com"}},
 		{"anthropic-request-too-large", []string{"api.anthropic.com"}},
-		{"max-tokens-truncation", []string{"api.openai.com", "api.anthropic.com"}},
-		{"malformed-tool-use", []string{"api.openai.com", "api.anthropic.com"}},
+		{"max-tokens-truncation", []string{"api.openai.com", "api.anthropic.com", "bedrock-runtime.*.amazonaws.com"}},
+		{"malformed-tool-use", []string{"api.openai.com", "api.anthropic.com", "bedrock-runtime.*.amazonaws.com"}},
 	}
 	for _, c := range cases {
 		t.Run(c.builtin, func(t *testing.T) {

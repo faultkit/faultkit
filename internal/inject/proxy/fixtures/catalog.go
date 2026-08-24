@@ -29,6 +29,7 @@ var catalog = map[string]map[string]Fixture{
 	"malformed-json": {
 		"openai":    {Path: "/v1/chat/completions", Status: 200, Body: openAIMalformedJSON},
 		"anthropic": {Path: "/v1/messages", Status: 200, Body: anthropicMalformedJSON},
+		"bedrock":   {Path: "/model/*/converse", Status: 200, Body: bedrockConverseMalformedJSON},
 	},
 	"streaming-cutoff": {
 		"openai":    {Path: "/v1/chat/completions", StreamCutoffTokens: 80},
@@ -42,10 +43,12 @@ var catalog = map[string]map[string]Fixture{
 	"max-tokens-truncation": {
 		"openai":    {Path: "/v1/chat/completions", Status: 200, Body: openAITruncated},
 		"anthropic": {Path: "/v1/messages", Status: 200, Body: anthropicTruncated},
+		"bedrock":   {Path: "/model/*/converse", Status: 200, Body: bedrockConverseTruncated},
 	},
 	"malformed-tool-use": {
 		"openai":    {Path: "/v1/chat/completions", Status: 200, Body: openAIMalformedToolUse},
 		"anthropic": {Path: "/v1/messages", Status: 200, Body: anthropicMalformedToolUse},
+		"bedrock":   {Path: "/model/*/converse", Status: 200, Body: bedrockConverseMalformedToolUse},
 	},
 	// Anthropic-distinctive modes (no cross-provider equivalent yet).
 	"stream-error": {
@@ -59,6 +62,15 @@ var catalog = map[string]map[string]Fixture{
 	},
 	"request-too-large": {
 		"anthropic": {Path: "/v1/*", Status: 413},
+	},
+	// Bedrock-distinctive modes (no cross-provider equivalent). Single-provider
+	// fixtures → they only fire via the bedrock-* scenarios, never leak into
+	// llm-api-degraded / anthropic-* scenarios.
+	"model-timeout": {
+		"bedrock": {Path: "/model/*", Status: 408, Headers: map[string]string{"x-amzn-errortype": "ModelTimeoutException"}},
+	},
+	"service-unavailable": {
+		"bedrock": {Path: "/model/*", Status: 503, Headers: map[string]string{"x-amzn-errortype": "ServiceUnavailableException"}},
 	},
 }
 

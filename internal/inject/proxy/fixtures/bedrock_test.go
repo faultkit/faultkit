@@ -2,6 +2,7 @@ package fixtures_test
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 
 	"github.com/faultkit/faultkit/internal/inject/proxy/fixtures"
@@ -25,5 +26,39 @@ func TestBedrockErrorEnvelope(t *testing.T) {
 	// bedrock template is added.
 	if bytes.Contains(syn.Body, []byte(`"error"`)) {
 		t.Errorf("body = %s, want a flat {\"message\":...} error, not an {\"error\":{...}} wrapper", syn.Body)
+	}
+}
+
+func TestBedrockConverseFixtures(t *testing.T) {
+	cases := []struct{ mode, wantSub string }{
+		{"max-tokens-truncation", `"stopReason":"max_tokens"`},
+		{"malformed-tool-use", `"toolUse"`},
+		{"malformed-json", `\"args\":{\"id\":42},}`},
+	}
+	for _, c := range cases {
+		f, ok := fixtures.For(c.mode, "bedrock")
+		if !ok {
+			t.Fatalf("no bedrock fixture for %q", c.mode)
+		}
+		if !strings.Contains(f.Body, c.wantSub) {
+			t.Errorf("%s bedrock body = %s, want substring %q", c.mode, f.Body, c.wantSub)
+		}
+		if f.Path != "/model/*/converse" {
+			t.Errorf("%s bedrock path = %q, want /model/*/converse", c.mode, f.Path)
+		}
+	}
+}
+
+func TestBedrockOnlyModesAreSingleProvider(t *testing.T) {
+	for _, mode := range []string{"model-timeout", "service-unavailable"} {
+		if _, ok := fixtures.For(mode, "openai"); ok {
+			t.Errorf("%q must not have an openai fixture", mode)
+		}
+		if _, ok := fixtures.For(mode, "anthropic"); ok {
+			t.Errorf("%q must not have an anthropic fixture", mode)
+		}
+		if _, ok := fixtures.For(mode, "bedrock"); !ok {
+			t.Errorf("%q must have a bedrock fixture", mode)
+		}
 	}
 }

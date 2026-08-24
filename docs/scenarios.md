@@ -13,10 +13,10 @@ scenarios (v0.2 and beyond), see the bottom of this page.
 
 ## At a glance
 
-v0.1 ships twelve scenarios. Ten use HTTPS proxy injection (LLM
+v0.1 ships fourteen scenarios. Twelve use HTTPS proxy injection (LLM
 failures); two use eBPF injection (Linux syscall-level failures).
 
-**Cross-provider LLM** — fire against OpenAI and Anthropic; narrow with
+**Cross-provider LLM** — fire against OpenAI, Anthropic, and Bedrock; narrow with
 `--provider` (see [Failure modes and providers](#failure-modes-and-providers)):
 
 | Scenario | Mode | What it tests |
@@ -37,6 +37,13 @@ failures); two use eBPF injection (Linux syscall-level failures).
 | `anthropic-refusal` | proxy | 200 with `stop_reason: "refusal"` |
 | `anthropic-request-too-large` | proxy | HTTP 413 `request_too_large` |
 
+**Bedrock-specific** — Bedrock failures with no cross-provider equivalent:
+
+| Scenario | Mode | What it tests |
+|---|---|---|
+| `bedrock-model-timeout` | proxy | HTTP 408 `ModelTimeoutException` |
+| `bedrock-service-unavailable` | proxy | HTTP 503 `ServiceUnavailableException` |
+
 **Syscall-level** — Linux, eBPF:
 
 | Scenario | Mode | What it tests |
@@ -44,7 +51,7 @@ failures); two use eBPF injection (Linux syscall-level failures).
 | `flaky-network` | eBPF | TCP connections drop with `ECONNRESET` |
 | `tool-permission-denied` | eBPF | File operations fail with `EACCES` |
 
-All twelve are free, open-source, and ship in the v0.1 binary. Run
+All fourteen are free, open-source, and ship in the v0.1 binary. Run
 `faultkit scenario list` to see what's available on your installation.
 
 ---
@@ -95,7 +102,7 @@ fixtures.
 experiments:
   - name: rate-limited
     failure: rate-limited     # the failure mode
-    probability: 0.2          # no `provider:` → fires for OpenAI and Anthropic
+    probability: 0.2          # no `provider:` → fires for every provider with a fixture
 ```
 
 - **No provider** → the failure runs against every provider that has a fixture
@@ -383,6 +390,32 @@ HTTP **413 `request_too_large`** for an oversized request.
 
 **What it tests:** oversized-prompt handling — chunking or graceful failure
 rather than an unhandled 413.
+
+---
+
+## Bedrock-specific scenarios
+
+Failures Amazon Bedrock surfaces that have no direct OpenAI or Anthropic
+equivalent, so each ships as its own scenario (Bedrock-only). All are
+fixture-driven — see [Failure modes and providers](#failure-modes-and-providers).
+
+### `bedrock-model-timeout`
+
+HTTP **408 `ModelTimeoutException`** — the model did not respond within the
+allotted time. Bedrock surfaces this as an HTTP 408 with the exception type in
+the `x-amzn-errortype` response header.
+
+**What it tests:** that your retry/timeout logic handles 408 from Bedrock
+distinctly from network-level timeouts; that `x-amzn-errortype` is parsed when
+it matters.
+
+### `bedrock-service-unavailable`
+
+HTTP **503 `ServiceUnavailableException`** — the service is temporarily unable
+to process the request. Returned under load or during internal Bedrock issues.
+
+**What it tests:** that your code retries 503 from Bedrock with appropriate
+backoff rather than treating it as a permanent failure.
 
 ---
 
