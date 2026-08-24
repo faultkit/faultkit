@@ -113,6 +113,13 @@ a fixture, never a new scenario. Failures with no cross-provider equivalent
 just modes with a single-provider fixture. Raw `fault` + `match` scenarios
 (custom hosts and paths) are unaffected and behave exactly as before.
 
+Providers with a fixture: `openai`, `anthropic`, and `bedrock` (Amazon Bedrock,
+`bedrock-runtime.<region>.amazonaws.com`). **Bedrock is forward-proxy only** —
+it authenticates with SigV4, which the forward proxy leaves intact but base-URL
+mode would break, so `--base-url` does not target Bedrock. `--provider bedrock`
+selects Bedrock's fixtures in forward-proxy mode; `llm-api-degraded` fires a
+`ThrottlingException` (429) against it.
+
 ---
 
 ## Proxy scenarios

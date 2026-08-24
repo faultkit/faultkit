@@ -17,7 +17,7 @@ func TestExpandBuiltinsParity(t *testing.T) {
 		hostPath   map[string]string
 		wantStatus int // 0 = streaming-cutoff (no status)
 	}{
-		{"llm-api-degraded", map[string]string{"api.openai.com": "/v1/*", "api.anthropic.com": "/v1/*"}, 429},
+		{"llm-api-degraded", map[string]string{"api.openai.com": "/v1/*", "api.anthropic.com": "/v1/*", "bedrock-runtime.*.amazonaws.com": "/model/*"}, 429},
 		{"malformed-json-response", map[string]string{"api.openai.com": "/v1/chat/completions", "api.anthropic.com": "/v1/messages"}, 200},
 		{"llm-streaming-cutoff", map[string]string{"api.openai.com": "/v1/chat/completions", "api.anthropic.com": "/v1/messages"}, 0},
 	}
@@ -57,6 +57,50 @@ func TestExpandBuiltinsParity(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestLLMAPIDegradedFansOutToBedrock(t *testing.T) {
+	s, err := scenario.LoadBuiltin("llm-api-degraded")
+	if err != nil {
+		t.Fatal(err)
+	}
+	expanded, err := expandScenario(s, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var hosts []string
+	for _, e := range expanded.Experiments {
+		hosts = append(hosts, e.Match.Host)
+	}
+	want := "bedrock-runtime.*.amazonaws.com"
+	found := false
+	for _, h := range hosts {
+		if h == want {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expanded hosts = %v, want one to be %q", hosts, want)
+	}
+}
+
+// A regional Bedrock host + model path must fire the fixture-expanded
+// experiment. White-box (package proxy) because it exercises the unexported
+// expandScenario + matchHostPath directly.
+func TestMatcherFiresOnRegionalBedrockHost(t *testing.T) {
+	s, err := scenario.LoadBuiltin("llm-api-degraded")
+	if err != nil {
+		t.Fatal(err)
+	}
+	expanded, err := expandScenario(s, "bedrock")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := NewMatcher(expanded)
+	exp := m.matchHostPath("bedrock-runtime.eu-west-1.amazonaws.com", "/model/anthropic.claude-3/invoke")
+	if exp == nil {
+		t.Fatal("expected a match for a regional Bedrock invoke path")
 	}
 }
 

@@ -7,6 +7,7 @@ package fixtures
 import (
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/faultkit/faultkit/pkg/faulttypes"
 )
@@ -28,6 +29,13 @@ type vendorTemplate struct {
 var vendorTemplates = []vendorTemplate{
 	{func(h string) bool { return h == "api.openai.com" }, openAIErrorBody},
 	{func(h string) bool { return h == "api.anthropic.com" }, anthropicErrorBody},
+	{isBedrockHost, bedrockErrorBody},
+}
+
+// isBedrockHost matches bedrock-runtime.<region>.amazonaws.com (and the -fips
+// variant) without needing a glob engine in this package.
+func isBedrockHost(h string) bool {
+	return strings.HasPrefix(h, "bedrock-runtime.") && strings.HasSuffix(h, ".amazonaws.com")
 }
 
 // Build returns a Synthetic for the given host and fault. If
