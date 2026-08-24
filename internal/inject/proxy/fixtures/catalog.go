@@ -84,6 +84,25 @@ func For(mode, provider string) (Fixture, bool) {
 	return f, ok
 }
 
+// Providers returns every provider id that appears anywhere in the catalog,
+// sorted and de-duplicated. Used to assert every catalog provider id is a
+// registered proxy provider — a typo'd id would otherwise make fan-out
+// silently skip that fixture.
+func Providers() []string {
+	seen := map[string]bool{}
+	for _, byProvider := range catalog {
+		for id := range byProvider {
+			seen[id] = true
+		}
+	}
+	out := make([]string, 0, len(seen))
+	for id := range seen {
+		out = append(out, id)
+	}
+	sort.Strings(out)
+	return out
+}
+
 // KnownMode reports whether mode is in the catalog.
 func KnownMode(mode string) bool {
 	_, ok := catalog[mode]

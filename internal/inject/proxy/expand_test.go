@@ -104,21 +104,18 @@ func TestExpandUnknownProvider(t *testing.T) {
 	}
 }
 
-// Catalog provider ids must be real registered providers, else fan-out would
-// silently skip them.
+// Every provider id that appears in the catalog must be a real registered
+// provider, else fan-out silently skips its fixtures. Derived from the catalog
+// (via fixtures.Providers) rather than a hardcoded list, so a new provider — or
+// a typo'd id like "bedrocK" in a catalog cell — is caught automatically.
 func TestCatalogProvidersAreRegistered(t *testing.T) {
-	for _, mode := range fixtures.Modes() {
-		for _, p := range providerRegistry {
-			// every registered provider either has a fixture or not; the
-			// inverse — a catalog provider with no registry entry — is the bug.
-			_ = p
-		}
-		for _, id := range []string{"openai", "anthropic"} {
-			if _, ok := fixtures.For(mode, id); ok {
-				if _, found := providerByID(id); !found {
-					t.Errorf("mode %q has a fixture for unregistered provider %q", mode, id)
-				}
-			}
+	ids := fixtures.Providers()
+	if len(ids) == 0 {
+		t.Fatal("catalog has no providers")
+	}
+	for _, id := range ids {
+		if _, found := providerByID(id); !found {
+			t.Errorf("catalog references unregistered provider %q", id)
 		}
 	}
 }

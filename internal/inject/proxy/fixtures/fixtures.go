@@ -32,8 +32,10 @@ var vendorTemplates = []vendorTemplate{
 	{isBedrockHost, bedrockErrorBody},
 }
 
-// isBedrockHost matches bedrock-runtime.<region>.amazonaws.com (and the -fips
-// variant) without needing a glob engine in this package.
+// isBedrockHost matches bedrock-runtime.<region>.amazonaws.com without needing
+// a glob engine in this package. It agrees with the registry glob
+// bedrock-runtime.*.amazonaws.com; neither matches the bedrock-runtime-fips.*
+// host variant.
 func isBedrockHost(h string) bool {
 	return strings.HasPrefix(h, "bedrock-runtime.") && strings.HasSuffix(h, ".amazonaws.com")
 }
