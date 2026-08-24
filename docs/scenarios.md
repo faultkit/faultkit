@@ -262,7 +262,9 @@ recycles the connection, your own infrastructure's idle timeout fires.
 The stream's `data: [DONE]` sentinel never arrives.
 
 This scenario configures the proxy to forward the stream normally for
-N tokens, then close the connection without sending the terminator.
+N content deltas (≈ tokens); lifecycle events like `message_start`
+don't count toward the budget. The connection then closes without
+sending the terminator.
 
 **What it tests:**
 
