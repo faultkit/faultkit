@@ -46,6 +46,22 @@ func TestProviderForPath(t *testing.T) {
 	}
 }
 
+func TestProvidersForHostGlobsSkipsForwardProxyOnly(t *testing.T) {
+	// Every provider that lacks base-URL env must never appear in base-URL
+	// derivation, even if its host glob matches.
+	for _, p := range providerRegistry {
+		if len(p.baseURLEnv) != 0 {
+			continue
+		}
+		got := providersForHostGlobs([]string{p.upstream})
+		for _, sel := range got {
+			if sel.id == p.id {
+				t.Errorf("provider %q has no base-URL env but was selected for base-URL", p.id)
+			}
+		}
+	}
+}
+
 func TestProvidersForHostGlobs(t *testing.T) {
 	ids := func(ps []provider) []string {
 		out := make([]string, len(ps))
