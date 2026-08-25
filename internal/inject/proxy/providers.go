@@ -86,14 +86,22 @@ func ProviderIDs() []string {
 	return ids
 }
 
+// forwardProxyOnly reports whether this provider can only be intercepted via
+// the forward proxy, not base-URL/origin mode: it has no base-URL env keys to
+// inject (e.g. Bedrock, whose SigV4 auth survives the MITM proxy but breaks a
+// rewritten origin), so it is excluded from every origin-mode seam.
+func (p provider) forwardProxyOnly() bool {
+	return len(p.baseURLEnv) == 0
+}
+
 // providerForPath resolves an incoming origin-mode request path to its
 // provider and returns the remaining path with the prefix stripped (so
 // the matcher and upstream forwarder see the real API path). ok is false
 // if no provider prefix matches.
 func providerForPath(path string) (p provider, rest string, ok bool) {
 	for _, cand := range providerRegistry {
-		if len(cand.baseURLEnv) == 0 {
-			continue // forward-proxy-only provider (e.g. bedrock); not served in origin mode. Its empty pathPrefix makes pathPrefix+"/" == "/", which HasPrefix would otherwise match on every request path.
+		if cand.forwardProxyOnly() {
+			continue // not served in origin mode; also, an empty pathPrefix would make pathPrefix+"/" == "/" and match every request path.
 		}
 		if path == cand.pathPrefix || strings.HasPrefix(path, cand.pathPrefix+"/") {
 			rest = strings.TrimPrefix(path, cand.pathPrefix)
@@ -123,8 +131,8 @@ func providerIDList(ps []provider) string {
 func providersForHostGlobs(globs []string) []provider {
 	var out []provider
 	for _, p := range providerRegistry {
-		if len(p.baseURLEnv) == 0 {
-			continue // forward-proxy-only provider; not injectable as a base URL
+		if p.forwardProxyOnly() {
+			continue // not injectable as a base URL
 		}
 		for _, g := range globs {
 			if g != "" && globMatch(g, p.upstream) {

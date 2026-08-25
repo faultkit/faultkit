@@ -48,10 +48,11 @@ func runCheck(out io.Writer) error {
 	}
 
 	fmt.Fprintln(out, "\nproviders:")
+	allModes := fixtures.Modes()
 	pw := tabwriter.NewWriter(out, 0, 0, 1, ' ', 0)
 	for _, id := range proxy.ProviderIDs() {
 		var modes []string
-		for _, m := range fixtures.Modes() {
+		for _, m := range allModes {
 			if _, ok := fixtures.For(m, id); ok {
 				modes = append(modes, m)
 			}

@@ -50,15 +50,12 @@ func TestBedrockConverseFixtures(t *testing.T) {
 }
 
 func TestBedrockOnlyModesAreSingleProvider(t *testing.T) {
+	wantFixture := map[string]bool{"openai": false, "anthropic": false, "bedrock": true}
 	for _, mode := range []string{"model-timeout", "service-unavailable"} {
-		if _, ok := fixtures.For(mode, "openai"); ok {
-			t.Errorf("%q must not have an openai fixture", mode)
-		}
-		if _, ok := fixtures.For(mode, "anthropic"); ok {
-			t.Errorf("%q must not have an anthropic fixture", mode)
-		}
-		if _, ok := fixtures.For(mode, "bedrock"); !ok {
-			t.Errorf("%q must have a bedrock fixture", mode)
+		for provider, want := range wantFixture {
+			if _, ok := fixtures.For(mode, provider); ok != want {
+				t.Errorf("mode %q provider %q: fixture present=%v, want %v", mode, provider, ok, want)
+			}
 		}
 	}
 }
