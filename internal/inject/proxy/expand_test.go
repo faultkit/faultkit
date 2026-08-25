@@ -19,8 +19,8 @@ func TestExpandAllProviders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expandScenario: %v", err)
 	}
-	if len(got.Experiments) != 2 {
-		t.Fatalf("got %d experiments, want 2 (one per provider)", len(got.Experiments))
+	if len(got.Experiments) != 3 {
+		t.Fatalf("got %d experiments, want 3 (one per provider)", len(got.Experiments))
 	}
 	hosts := map[string]bool{}
 	for _, e := range got.Experiments {
@@ -32,7 +32,7 @@ func TestExpandAllProviders(t *testing.T) {
 			t.Errorf("exp %q probability = %v, want 0.2", e.Name, e.Probability)
 		}
 	}
-	for _, want := range []string{"api.openai.com", "api.anthropic.com"} {
+	for _, want := range []string{"api.openai.com", "api.anthropic.com", "bedrock-runtime.*.amazonaws.com"} {
 		if !hosts[want] {
 			t.Errorf("missing fan-out host %q (got %v)", want, hosts)
 		}

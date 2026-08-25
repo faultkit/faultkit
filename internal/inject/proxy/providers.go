@@ -48,6 +48,12 @@ var providerRegistry = []provider{
 		pathPrefix: "/__fk/anthropic",
 		apiBase:    "",
 	},
+	{
+		id:       "bedrock",
+		upstream: "bedrock-runtime.*.amazonaws.com", // host glob: match/attribution only
+		// baseURLEnv intentionally empty — Bedrock is forward-proxy only
+		// (SigV4 breaks base-URL origin rewrite).
+	},
 }
 
 // baseURL is the value to inject into this provider's base-URL env vars:
@@ -86,6 +92,9 @@ func ProviderIDs() []string {
 // if no provider prefix matches.
 func providerForPath(path string) (p provider, rest string, ok bool) {
 	for _, cand := range providerRegistry {
+		if len(cand.baseURLEnv) == 0 {
+			continue // forward-proxy-only provider (e.g. bedrock); not served in origin mode. Its empty pathPrefix makes pathPrefix+"/" == "/", which HasPrefix would otherwise match on every request path.
+		}
 		if path == cand.pathPrefix || strings.HasPrefix(path, cand.pathPrefix+"/") {
 			rest = strings.TrimPrefix(path, cand.pathPrefix)
 			if rest == "" {

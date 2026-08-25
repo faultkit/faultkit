@@ -24,6 +24,7 @@ var catalog = map[string]map[string]Fixture{
 	"rate-limited": {
 		"openai":    {Path: "/v1/*", Status: 429, Headers: map[string]string{"Retry-After": "30"}},
 		"anthropic": {Path: "/v1/*", Status: 429, Headers: map[string]string{"Retry-After": "30"}},
+		"bedrock":   {Path: "/model/*", Status: 429, Headers: map[string]string{"x-amzn-errortype": "ThrottlingException"}},
 	},
 	"malformed-json": {
 		"openai":    {Path: "/v1/chat/completions", Status: 200, Body: openAIMalformedJSON},
