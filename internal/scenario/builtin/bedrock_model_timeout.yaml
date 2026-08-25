@@ -1,0 +1,6 @@
+name: bedrock-model-timeout
+description: Bedrock returns HTTP 408 ModelTimeoutException — the model did not respond in time.
+experiments:
+  - name: model-timeout
+    failure: model-timeout
+    probability: 0.2

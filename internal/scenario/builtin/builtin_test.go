@@ -16,6 +16,8 @@ func TestBuiltinsLoadable(t *testing.T) {
 		"anthropic-request-too-large",
 		"anthropic-stream-error",
 		"anthropic-tool-use-cutoff",
+		"bedrock-model-timeout",
+		"bedrock-service-unavailable",
 		"flaky-network",
 		"llm-api-degraded",
 		"llm-streaming-cutoff",

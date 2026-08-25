@@ -1,0 +1,6 @@
+name: bedrock-service-unavailable
+description: Bedrock returns HTTP 503 ServiceUnavailableException under load.
+experiments:
+  - name: service-unavailable
+    failure: service-unavailable
+    probability: 0.2

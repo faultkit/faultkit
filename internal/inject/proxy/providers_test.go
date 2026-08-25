@@ -75,7 +75,7 @@ func TestProvidersForHostGlobs(t *testing.T) {
 		t.Errorf("exact openai glob = %v, want [openai]", got)
 	}
 	if got := ids(providersForHostGlobs([]string{"api.*.com"})); len(got) != 2 {
-		t.Errorf("wildcard glob = %v, want both providers", got)
+		t.Errorf("wildcard glob = %v, want openai + anthropic (bedrock's glob upstream isn't matched by api.*.com)", got)
 	}
 	if got := ids(providersForHostGlobs([]string{"example.com"})); len(got) != 0 {
 		t.Errorf("non-matching glob = %v, want none", got)
