@@ -13,7 +13,7 @@
 
 </div>
 
-> **Status:** v0.1 — twelve scenarios end-to-end (LLM, Anthropic-specific, and syscall-level). See [roadmap](#roadmap) for what ships next.
+> **Status:** v0.1 — fourteen scenarios end-to-end (LLM, Anthropic-specific, Bedrock-specific, and syscall-level). See [roadmap](#roadmap) for what ships next.
 > **Platforms:** macOS and Linux for HTTP scenarios. Linux 5.8+ (x86-64) for syscall-level scenarios.
 
 ---
@@ -67,12 +67,12 @@ faultkit ships scenarios mapped to real production failure modes. Each one targe
 ### LLM and gateway
 
 These are **failure modes** — provider-agnostic recipes. By default they fire
-against every provider faultkit knows (OpenAI, Anthropic); narrow to one with
-`--provider`.
+against every provider faultkit knows (OpenAI, Anthropic, Bedrock); narrow to
+one with `--provider`.
 
 | Scenario | What it does | v0.1 |
 |---|---|:---:|
-| `llm-api-degraded` | Inject 429 / 503 / timeout into requests to OpenAI and Anthropic | ✅ |
+| `llm-api-degraded` | Inject 429 / 503 / timeout into requests to OpenAI, Anthropic, and Bedrock | ✅ |
 | `malformed-json-response` | LLM returns 200 OK with syntactically invalid JSON in the body | ✅ |
 | `malformed-tool-use` | Tool call with malformed / schema-violating arguments, breaking dispatch | ✅ |
 | `max-tokens-truncation` | 200 with truncated content (`finish_reason: length` / `stop_reason: max_tokens`) an agent treats as complete | ✅ |
@@ -94,6 +94,17 @@ ship as their own scenarios (Anthropic-only).
 | `anthropic-tool-use-cutoff` | `tool_use` block truncated by `max_tokens` — an incomplete tool call | ✅ |
 | `anthropic-refusal` | 200 with `stop_reason: "refusal"` — the model declined | ✅ |
 | `anthropic-request-too-large` | HTTP 413 `request_too_large` for an oversized request | ✅ |
+
+### Bedrock-specific
+
+Amazon Bedrock failures with no cross-provider equivalent. Bedrock is
+**forward-proxy only** — it authenticates with SigV4, which the proxy leaves
+intact but base-URL mode would break, so `--base-url` doesn't target it.
+
+| Scenario | What it does | v0.1 |
+|---|---|:---:|
+| `bedrock-model-timeout` | HTTP 408 `ModelTimeoutException` — the model didn't respond in time | ✅ |
+| `bedrock-service-unavailable` | HTTP 503 `ServiceUnavailableException` under load | ✅ |
 
 ### RAG and vector DB
 
@@ -209,7 +220,7 @@ it knows:
 experiments:
   - name: rate-limited
     failure: rate-limited     # the failure mode
-    probability: 0.2          # no `provider:` → fires for OpenAI *and* Anthropic
+    probability: 0.2          # no `provider:` → fires for OpenAI, Anthropic, and Bedrock
 ```
 
 Narrow it to one provider with the field, or the `--provider` flag at runtime:
@@ -218,7 +229,10 @@ Narrow it to one provider with the field, or the `--provider` flag at runtime:
 faultkit run --scenario malformed-json-response --provider anthropic -- pytest tests/
 ```
 
-Adding a new provider means adding a fixture, never a new scenario. The raw
+Adding a new provider means adding a fixture, never a new scenario. faultkit
+knows three today — OpenAI, Anthropic, and **Amazon Bedrock** (forward-proxy
+only; its SigV4 auth survives the MITM proxy but rules out base-URL mode). Run
+`faultkit check` to see every registered provider and the modes it fires. The raw
 `fault` + `match` form (above) still works for fully custom scenarios.
 
 Schema reference: [docs.faultkit.dev/scenarios](https://faultkit.dev/docs/scenarios).
@@ -329,9 +343,10 @@ More CI recipes: [examples/](./examples/).
 
 - HTTPS proxy injector with the LLM failure modes (`llm-api-degraded`, `malformed-json-response`, `malformed-tool-use`, `max-tokens-truncation`, `llm-streaming-cutoff`)
 - Anthropic-specific scenarios (`anthropic-overloaded`, `anthropic-stream-error`, `anthropic-tool-use-cutoff`, `anthropic-refusal`, `anthropic-request-too-large`)
-- Failure-mode × provider model with `--provider` selection, plus base-URL injection (`--base-url`)
+- Amazon Bedrock provider (forward-proxy only) — the shared LLM modes fan out to it, plus Bedrock-specific `bedrock-model-timeout`, `bedrock-service-unavailable`
+- Failure-mode × provider model (OpenAI, Anthropic, Bedrock) with `--provider` selection, plus base-URL injection (`--base-url`)
 - eBPF injector with `flaky-network`, `tool-permission-denied`
-- YAML scenario loading, auto-mode selection, `faultkit check`, distinct exit codes
+- YAML scenario loading, auto-mode selection, `faultkit check` (lists modes and providers), distinct exit codes
 - GitHub Actions integration
 
 **Next (v0.2)** — the 🛣️ items in [Scenarios](#scenarios), sequenced by capability
