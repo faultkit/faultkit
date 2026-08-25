@@ -8,7 +8,9 @@ import "strings"
 // via a provider-specific base-URL environment variable. Each provider
 // records:
 //
-//   - upstream:   the real API host faultkit fronts and forwards to.
+//   - upstream:   the real API host faultkit fronts and forwards to. For a
+//     forward-proxy-only provider it may be a host glob
+//     (e.g. bedrock-runtime.*.amazonaws.com) used only for match/attribution.
 //   - baseURLEnv: the env keys whose value an SDK uses as the API origin;
 //     SDKs honor these even when they ignore HTTPS_PROXY.
 //   - pathPrefix: the prefix faultkit serves this provider under, so a
@@ -112,6 +114,9 @@ func providerIDList(ps []provider) string {
 func providersForHostGlobs(globs []string) []provider {
 	var out []provider
 	for _, p := range providerRegistry {
+		if len(p.baseURLEnv) == 0 {
+			continue // forward-proxy-only provider; not injectable as a base URL
+		}
 		for _, g := range globs {
 			if g != "" && globMatch(g, p.upstream) {
 				out = append(out, p)

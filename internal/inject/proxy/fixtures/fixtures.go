@@ -18,18 +18,28 @@ type Synthetic struct {
 	Body    []byte
 }
 
+// vendorTemplate matches a host to the error-body synthesizer for that
+// vendor. Ordered; first match wins. A provider is added by appending a row.
+type vendorTemplate struct {
+	match func(host string) bool
+	body  func(status int) []byte
+}
+
+var vendorTemplates = []vendorTemplate{
+	{func(h string) bool { return h == "api.openai.com" }, openAIErrorBody},
+	{func(h string) bool { return h == "api.anthropic.com" }, anthropicErrorBody},
+}
+
 // Build returns a Synthetic for the given host and fault. If
-// fault.ResponseBody is set, it is returned verbatim; otherwise the
-// body is synthesized from a per-vendor template.
+// fault.ResponseBody is set, it is returned verbatim; otherwise the body is
+// synthesized from the first matching vendor template, or a generic shape.
 func Build(host string, fault faulttypes.Fault) Synthetic {
-	switch host {
-	case "api.openai.com":
-		return vendorResponse(fault, openAIErrorBody)
-	case "api.anthropic.com":
-		return vendorResponse(fault, anthropicErrorBody)
-	default:
-		return vendorResponse(fault, genericErrorBody)
+	for _, t := range vendorTemplates {
+		if t.match(host) {
+			return vendorResponse(fault, t.body)
+		}
 	}
+	return vendorResponse(fault, genericErrorBody)
 }
 
 // genericErrorBody is the vendor-agnostic error shape used for hosts
