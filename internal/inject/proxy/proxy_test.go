@@ -86,6 +86,21 @@ func clientThroughProxy(t *testing.T, env []string) *http.Client {
 	}
 }
 
+func TestInjectedEnvTrustsCAForAWSSDKs(t *testing.T) {
+	_, env := startInjector(t, nil)
+	caPath := envValue(env, "SSL_CERT_FILE")
+	if caPath == "" {
+		t.Fatal("SSL_CERT_FILE not in env")
+	}
+	// AWS SDKs (boto3/botocore, aws-sdk-go, aws-sdk-js) read the CA bundle from
+	// AWS_CA_BUNDLE, not the requests/curl/node variables — without it a
+	// forward-proxy MITM fails the TLS handshake for AWS clients (e.g. Bedrock
+	// via boto3), so it must point at the same per-run CA.
+	if got := envValue(env, "AWS_CA_BUNDLE"); got != caPath {
+		t.Errorf("AWS_CA_BUNDLE = %q, want the per-run CA path %q", got, caPath)
+	}
+}
+
 func TestProxyRoundTrip(t *testing.T) {
 	const wantBody = "hello upstream"
 	upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

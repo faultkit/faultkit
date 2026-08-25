@@ -18,13 +18,15 @@ import (
 const eventBuffer = 256
 
 // proxyEnvKeys are the env vars set on the target so its HTTP/HTTPS
-// traffic flows through faultkit's proxy. Both upper- and lower-case
-// variants are needed in practice — Python's `requests` reads
-// HTTPS_PROXY, libcurl reads CURL_CA_BUNDLE, Node reads
-// NODE_EXTRA_CA_CERTS, etc.
+// traffic flows through faultkit's proxy and trusts the per-run CA. Different
+// clients read different variables, so we set them all: Python's `requests`
+// reads HTTPS_PROXY + REQUESTS_CA_BUNDLE, libcurl reads CURL_CA_BUNDLE, Node
+// reads NODE_EXTRA_CA_CERTS, and the AWS SDKs (boto3/botocore, aws-sdk-go,
+// aws-sdk-js) read AWS_CA_BUNDLE — without it, AWS clients (e.g. Bedrock via
+// boto3) reject the MITM leaf and the scenario never fires.
 var (
 	proxyURLEnvKeys = []string{"HTTPS_PROXY", "HTTP_PROXY", "https_proxy", "http_proxy"}
-	caPathEnvKeys   = []string{"SSL_CERT_FILE", "REQUESTS_CA_BUNDLE", "NODE_EXTRA_CA_CERTS", "CURL_CA_BUNDLE"}
+	caPathEnvKeys   = []string{"SSL_CERT_FILE", "REQUESTS_CA_BUNDLE", "NODE_EXTRA_CA_CERTS", "CURL_CA_BUNDLE", "AWS_CA_BUNDLE"}
 )
 
 // Injector implements inject.Injector for the HTTPS proxy mechanism. It
