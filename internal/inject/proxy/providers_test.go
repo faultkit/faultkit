@@ -50,7 +50,7 @@ func TestProvidersForHostGlobsSkipsForwardProxyOnly(t *testing.T) {
 	// Every provider that lacks base-URL env must never appear in base-URL
 	// derivation, even if its host glob matches.
 	for _, p := range providerRegistry {
-		if len(p.baseURLEnv) != 0 {
+		if !p.forwardProxyOnly() {
 			continue
 		}
 		got := providersForHostGlobs([]string{p.upstream})

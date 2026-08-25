@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"encoding/json"
+	"slices"
 	"testing"
 
 	_ "github.com/faultkit/faultkit/internal/scenario/builtin"
@@ -74,13 +75,7 @@ func TestLLMAPIDegradedFansOutToBedrock(t *testing.T) {
 		hosts = append(hosts, e.Match.Host)
 	}
 	want := "bedrock-runtime.*.amazonaws.com"
-	found := false
-	for _, h := range hosts {
-		if h == want {
-			found = true
-		}
-	}
-	if !found {
+	if !slices.Contains(hosts, want) {
 		t.Errorf("expanded hosts = %v, want one to be %q", hosts, want)
 	}
 }

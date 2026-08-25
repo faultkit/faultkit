@@ -77,15 +77,24 @@ func isSSE(res *http.Response) bool {
 	return strings.HasPrefix(res.Header.Get("Content-Type"), sseContentType)
 }
 
+// SSE content-delta sentinels, hoisted to package level so isContentDelta
+// doesn't allocate a []byte per line in the streaming-cutoff goroutine.
+var (
+	sseDataPrefix       = []byte("data:")
+	sseAnthropicDelta   = []byte("content_block_delta")
+	sseOpenAIDeltaKey   = []byte(`"delta"`)
+	sseOpenAIContentKey = []byte(`"content"`)
+)
+
 // isContentDelta reports whether an SSE line carries model content (a token-ish
 // delta), as opposed to lifecycle events (message_start, ping, content_block_start).
 // ponytail: substring heuristic over the two provider shapes we ship — OpenAI
 // (choices[].delta.content) and Anthropic (content_block_delta). Refine to a
 // JSON parse only if a provider's shape starts to alias.
 func isContentDelta(line []byte) bool {
-	if !bytes.HasPrefix(line, []byte("data:")) {
+	if !bytes.HasPrefix(line, sseDataPrefix) {
 		return false
 	}
-	return bytes.Contains(line, []byte("content_block_delta")) || // Anthropic
-		(bytes.Contains(line, []byte(`"delta"`)) && bytes.Contains(line, []byte(`"content"`))) // OpenAI
+	return bytes.Contains(line, sseAnthropicDelta) || // Anthropic
+		(bytes.Contains(line, sseOpenAIDeltaKey) && bytes.Contains(line, sseOpenAIContentKey)) // OpenAI
 }
