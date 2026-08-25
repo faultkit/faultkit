@@ -11,11 +11,12 @@ import (
 const sseContentType = "text/event-stream"
 
 // wrapStreamCutoff replaces res.Body with a reader that forwards the
-// upstream stream line-by-line until cutAt SSE `data:` events have
-// been seen, then closes the connection without emitting the
-// `[DONE]` sentinel. Scanner errors and oversize-line failures are
-// reported via onErr so a corrupt upstream looks different from a
-// clean cut. No-op for non-SSE responses.
+// upstream stream line-by-line until cutAt content deltas have been
+// seen, then closes the connection without emitting the `[DONE]`
+// sentinel. Lifecycle events (message_start, ping, content_block_start)
+// pass through but do not consume the budget. Scanner errors and
+// oversize-line failures are reported via onErr so a corrupt upstream
+// looks different from a clean cut. No-op for non-SSE responses.
 //
 // The goroutine exits cooperatively when downstream Close propagates
 // through streamBody → io.Pipe → pw.Write returns io.ErrClosedPipe.
@@ -44,7 +45,7 @@ func wrapStreamCutoff(res *http.Response, cutAt int, onErr func(error)) {
 			if _, err := pw.Write([]byte("\n")); err != nil {
 				return
 			}
-			if bytes.HasPrefix(line, []byte("data:")) {
+			if isContentDelta(line) {
 				eventCount++
 				if eventCount >= cutAt {
 					return
@@ -74,4 +75,17 @@ func (s *streamBody) Close() error {
 
 func isSSE(res *http.Response) bool {
 	return strings.HasPrefix(res.Header.Get("Content-Type"), sseContentType)
+}
+
+// isContentDelta reports whether an SSE line carries model content (a token-ish
+// delta), as opposed to lifecycle events (message_start, ping, content_block_start).
+// ponytail: substring heuristic over the two provider shapes we ship — OpenAI
+// (choices[].delta.content) and Anthropic (content_block_delta). Refine to a
+// JSON parse only if a provider's shape starts to alias.
+func isContentDelta(line []byte) bool {
+	if !bytes.HasPrefix(line, []byte("data:")) {
+		return false
+	}
+	return bytes.Contains(line, []byte("content_block_delta")) || // Anthropic
+		(bytes.Contains(line, []byte(`"delta"`)) && bytes.Contains(line, []byte(`"content"`))) // OpenAI
 }

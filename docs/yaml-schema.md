@@ -102,7 +102,7 @@ fault:
 | `http_status` | int | The status code the proxy returns to the target. Sent with `X-Faultkit-Synthetic: true`. |
 | `response_headers` | map[string]string | Merged into the synthetic response. |
 | `response_body` | string | If set, replaces the upstream body verbatim. |
-| `stream_cutoff_tokens` | int | For SSE streams: forwards N `data:` events from upstream then drops the connection without `[DONE]`. Mutually exclusive with `response_body`. |
+| `stream_cutoff_tokens` | int | For SSE streams: forwards N content deltas (≈ tokens) from upstream then drops the connection without `[DONE]`. Lifecycle events like `message_start` don't count. Mutually exclusive with `response_body`. |
 
 A fault is HTTP-level if any of `http_status`, `response_headers`,
 `response_body`, or `stream_cutoff_tokens` is set.

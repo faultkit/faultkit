@@ -118,13 +118,15 @@ func TestE2E_StreamingCutoff(t *testing.T) {
 		}},
 	}
 
+	// Upstream emits Anthropic-shape content_block_delta events (the shape
+	// isContentDelta recognises) so cut-at-3 lands after the 3rd content delta.
 	const upstreamEvents = 10
 	upstream, client := e2e(t, s, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
 		flusher, _ := w.(http.Flusher)
 		for i := 0; i < upstreamEvents; i++ {
-			fmt.Fprintf(w, "data: {\"index\":%d}\n\n", i)
+			fmt.Fprintf(w, "data: {\"type\":\"content_block_delta\",\"index\":%d}\n\n", i)
 			if flusher != nil {
 				flusher.Flush()
 			}
