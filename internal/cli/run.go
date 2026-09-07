@@ -44,6 +44,7 @@ func newRunCmd() *cobra.Command {
 	cmd.Flags().StringVar(&opts.configPath, "config", "", "scenario YAML file")
 	cmd.Flags().StringVar(&opts.mode, "mode", modeAuto, "injection mode: auto, proxy, ebpf")
 	cmd.Flags().StringVar(&opts.reportPath, "report", "", "write JSON report to path")
+	cmd.Flags().BoolVar(&opts.emitJSON, "json", false, "emit the machine-readable report/v1 to stdout (human summary and target output go to stderr)")
 	cmd.Flags().BoolVar(&opts.verbose, "verbose", false, "log injector activity and each fault as it fires")
 	cmd.Flags().BoolVar(&opts.baseURL, "base-url", false, "point the target's SDK at faultkit via *_BASE_URL env (OPENAI_BASE_URL, ANTHROPIC_BASE_URL) instead of HTTPS_PROXY — for clients that ignore proxy env")
 	cmd.Flags().StringVar(&opts.provider, "provider", "", "limit fixture-driven failure modes to one provider (e.g. openai, anthropic); default fans out across all providers")
@@ -52,7 +53,7 @@ func newRunCmd() *cobra.Command {
 
 type runOpts struct {
 	scenarioName, configPath, mode, reportPath, provider string
-	verbose, baseURL                                     bool
+	verbose, baseURL, emitJSON                           bool
 	target                                               []string
 	stdout, stderr                                       io.Writer
 }
@@ -106,8 +107,14 @@ func runFaultkit(parentCtx context.Context, o runOpts) error {
 		drainDone <- drainEvents(inj.Events())
 	}()
 
+	// In --json mode stdout is reserved for the single report/v1 document, so
+	// the target's own stdout is routed to stderr with everything else.
+	targetStdout := o.stdout
+	if o.emitJSON {
+		targetStdout = o.stderr
+	}
 	r := &runner.Runner{
-		Stdout: o.stdout,
+		Stdout: targetStdout,
 		Stderr: o.stderr,
 		OnStarted: func(pid int) {
 			pa, ok := inj.(inject.PIDAware)
@@ -147,6 +154,11 @@ func runFaultkit(parentCtx context.Context, o runOpts) error {
 		Events:     events,
 	}
 	report.WriteTerminal(o.stderr, summary)
+	if o.emitJSON {
+		if err := report.WriteJSON(o.stdout, summary); err != nil {
+			fmt.Fprintf(o.stderr, "warning: writing json report: %v\n", err)
+		}
+	}
 	if o.reportPath != "" {
 		if err := writeJSONReport(o.reportPath, summary); err != nil {
 			fmt.Fprintf(o.stderr, "warning: writing report: %v\n", err)
