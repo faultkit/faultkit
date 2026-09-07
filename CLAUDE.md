@@ -128,7 +128,7 @@ should pass" — actually run it.
 
 ### Phase completion
 
-When finishing a phase from `docs/internal/V0.1_SPEC.md`, run `make sec`
+When finishing a phase from `docs/internal/V0.1.1_SPEC.md`, run `make sec`
 in addition to `make lint test`. Both `gosec` and `nilaway` must report
 zero findings before the phase counts as done.
 

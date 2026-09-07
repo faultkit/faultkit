@@ -70,3 +70,6 @@ aur_key*
 
 # Internal strategy doc — kept locally for reference, not published.
 PROJECT_PLAN.md
+
+# Local pre-redesign roadmap archive (not for upstream)
+.archive/
