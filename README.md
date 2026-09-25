@@ -270,7 +270,7 @@ go install github.com/faultkit/faultkit/cmd/faultkit@latest
 
 **Verify a release**
 
-Every release's `checksums.txt` is signed keyless with
+Starting with v0.1.3, every release's `checksums.txt` is signed keyless with
 [Sigstore cosign](https://docs.sigstore.dev/); the signature bundle ships
 next to it as `checksums.txt.sigstore.json`. The Homebrew formula and the
 AUR package pin the sha256 values from that signed file. To check a
