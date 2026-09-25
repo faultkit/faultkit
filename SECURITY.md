@@ -49,6 +49,9 @@ the authoritative, enforced rules live in
 - **Vendored dependencies.** Dependencies are vendored and builds run
   from `vendor/`, so they are reviewable in diffs and not fetched from
   the network at build time.
+- **Signed releases.** Each release's `checksums.txt` is signed keyless
+  with Sigstore cosign; the Homebrew formula and AUR package pin sha256
+  values from that signed file. See the README's "Verify a release".
 
 ## Scope and threat model
 

@@ -37,6 +37,21 @@ archives:
 checksum:
   name_template: 'checksums.txt'
 
+# Keyless Sigstore signing of checksums.txt (cosign v3 bundle format).
+# Signing checksums.txt covers every tarball; the Homebrew formula and
+# AUR PKGBUILD pin sha256 values from this same signed file. Runs from
+# the maintainer's machine: cosign opens a browser for the OIDC login,
+# and the signing identity is the maintainer's email.
+signs:
+  - cmd: cosign
+    artifacts: checksum
+    signature: "${artifact}.sigstore.json"
+    args:
+      - sign-blob
+      - "--bundle=${signature}"
+      - "${artifact}"
+      - --yes
+
 snapshot:
   version_template: "{{ incpatch .Version }}-next"
 

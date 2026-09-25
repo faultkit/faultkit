@@ -268,6 +268,23 @@ yay -S faultkit-bin                   # Arch (AUR)
 go install github.com/faultkit/faultkit/cmd/faultkit@latest
 ```
 
+**Verify a release**
+
+Every release's `checksums.txt` is signed keyless with
+[Sigstore cosign](https://docs.sigstore.dev/); the signature bundle ships
+next to it as `checksums.txt.sigstore.json`. The Homebrew formula and the
+AUR package pin the sha256 values from that signed file. To check a
+downloaded tarball yourself (cosign v2.4+):
+
+```bash
+cosign verify-blob \
+  --bundle checksums.txt.sigstore.json \
+  --certificate-identity cenk.kalpakoglu@gmail.com \
+  --certificate-oidc-issuer https://accounts.google.com \
+  checksums.txt
+sha256sum --ignore-missing -c checksums.txt   # macOS: shasum -a 256 --ignore-missing -c
+```
+
 **Requirements**
 
 - **Proxy-mode scenarios**: any platform with a working Go runtime. No privileges.
