@@ -11,6 +11,10 @@
 
 [Install](#install) · [Coding agents](#from-your-coding-agent) · [60-second demo](#60-second-demo) · [Scenarios](#scenarios) · [How it works](#how-it-works) · [Docs](https://faultkit.dev/#docs)
 
+<img src="assets/skill-demo.gif" alt="A Claude Code session on a helpdesk triage agent: /faultkit:review finds two invariants, /faultkit:prove-all confirms both fail silently under injected faults, and /faultkit:harden guards them and proves them under the same faults.">
+
+<sub>A real Claude Code session with the [faultkit skill](#from-your-coding-agent) on a helpdesk triage agent: `/faultkit:review` → `/faultkit:prove-all` → `/faultkit:harden`. Waits are cut.</sub>
+
 </div>
 
 > **Status:** v0.1 — fourteen scenarios end-to-end (LLM, Anthropic-specific, Bedrock-specific, and syscall-level).

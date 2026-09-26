@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and `/faultkit:prove-all` (`/faultkit:run` is the same as `prove-all`). The
   CI replay step pins a helper that downloads faultkit v0.1.3.
 - The README drops the Roadmap and faultkit Pro sections.
+- The README opens with a GIF of a real Claude Code session: review,
+  prove-all, and harden on a helpdesk triage agent.
 - SECURITY.md: private vulnerability reporting is enabled.
 
 ## [0.1.3] - 2026-09-26
