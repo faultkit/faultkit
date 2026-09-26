@@ -7,12 +7,77 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-09-26
+
+The Bedrock and agent-readiness release. faultkit gains **Amazon Bedrock**
+as a third LLM provider, a **failure-mode × provider** scenario model with
+nine new built-in scenarios, and a machine-readable **`report/v1`** whose
+verdict a coding agent can consume. It is also the first **signed**
+release. Upgrading is drop-in: `--provider` and `--json` are opt-in, the
+exit codes are unchanged, and the scenario YAML schema only gains optional
+fields, so anything that ran against v0.1.2 runs unchanged here.
+
 ### Added
 
+- **Amazon Bedrock provider (forward-proxy only).** `bedrock-runtime`
+  joins OpenAI and Anthropic, and the shared LLM modes fan out to it:
+  `llm-api-degraded` throttles it with a 429 `ThrottlingException`, and
+  `malformed-json-response`, `max-tokens-truncation`, and
+  `malformed-tool-use` return Converse-shaped bodies. SigV4 survives the
+  MITM proxy; base-URL mode does not target Bedrock. Bedrock streaming
+  (AWS event-stream) is not faulted yet.
+- **Failure-mode × provider scenario model.** An experiment can name a
+  `failure` mode with an optional `provider`; with no provider it fans out
+  across every provider that has a fixture for that mode. The new
+  `--provider <id>` flag narrows a run to one provider. A new provider now
+  means new fixtures, never new scenarios.
+- **Nine new built-in scenarios**, fourteen in all (`faultkit scenario
+  list`):
+  - cross-provider: `malformed-tool-use`, `max-tokens-truncation`
+  - Anthropic: `anthropic-overloaded` (529), `anthropic-stream-error`,
+    `anthropic-tool-use-cutoff`, `anthropic-refusal`,
+    `anthropic-request-too-large` (413)
+  - Bedrock: `bedrock-model-timeout` (408), `bedrock-service-unavailable`
+    (503)
+- **`report/v1` and `--json`.** Reports carry
+  `"schema": "faultkit.dev/report/v1"` and a `verdict` of
+  `invariant_proven_under_fault`, `silent_failure_confirmed`, or
+  `invalid_evidence`. The verdict is derived from the same facts as the
+  exit code, so the two never disagree. `--json` writes the report to
+  stdout and moves the human summary and the target's output to stderr;
+  `--report <path>` writes the same document to a file.
+- **`faultkit check` lists providers** and the failure modes each one has
+  a fixture for.
 - **Signed releases.** `checksums.txt` is now signed keyless with
   Sigstore cosign and published with a `checksums.txt.sigstore.json`
   bundle. The Homebrew formula and AUR package pin sha256 values from
   that signed file. Verification steps are in the README.
+
+### Fixed
+
+- **AWS SDKs now trust the per-run CA.** faultkit also sets
+  `AWS_CA_BUNDLE`, which boto3/botocore and the other AWS SDKs read
+  instead of `SSL_CERT_FILE`, so AWS clients no longer reject the proxy's
+  certificate.
+- **`stream_cutoff_tokens` counts content deltas, not SSE lifecycle
+  events** (`message_start`, `ping`, …), so a cutoff of N no longer lands
+  early. The YAML field name is unchanged.
+
+### Build / supply chain
+
+- **CI runs Go 1.25.13**, which fixes stdlib vulnerabilities in
+  `crypto/tls`, `net/http`, and `encoding/asn1`. Also bumped:
+  `golang.org/x/net` v0.55.0 and `cilium/ebpf` v0.22.0. Together these
+  clear the govulncheck findings.
+- **`make release` requires the pinned cosign** (v3.1.3) and signs
+  through a browser OIDC login; no signing key is stored anywhere.
+- **`undici` 7.29.1** in the Node examples.
+
+### Docs
+
+- The README covers the faultkit skill for coding agents
+  ([faultkit/skills](https://github.com/faultkit/skills)), `report/v1`, and
+  replaying the skill's invariants in CI.
 
 ## [0.1.2] - 2026-06-18
 
@@ -210,7 +275,8 @@ breaking changes require a major version bump.
 - [YAML schema](./docs/yaml-schema.md) — author your own scenarios.
 - [Using faultkit in CI](./docs/ci.md) — GitHub Actions recipes.
 
-[Unreleased]: https://github.com/faultkit/faultkit/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/faultkit/faultkit/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/faultkit/faultkit/releases/tag/v0.1.3
 [0.1.2]: https://github.com/faultkit/faultkit/releases/tag/v0.1.2
 [0.1.1]: https://github.com/faultkit/faultkit/releases/tag/v0.1.1
 [0.1.0]: https://github.com/faultkit/faultkit/releases/tag/v0.1.0
