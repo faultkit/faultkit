@@ -80,11 +80,11 @@ clean:
 
 # Local-release model: releases are cut from a maintainer's machine, not
 # CI, so no publish credential is ever stored as a GitHub secret. The
-# GitHub release uses your `gh` auth; AUR uses the AUR signing key
-# (AUR_KEY=<path>, e.g. ~/.ssh/aur_key); the Homebrew tap is pushed over
-# your ambient GitHub SSH. checksums.txt is signed keyless with cosign,
-# which opens a browser for the Sigstore OIDC login — sign in with the
-# identity documented in the README's "Verify a release" section.
+# GitHub release and the Homebrew tap use your `gh` auth; AUR uses the AUR
+# SSH key (AUR_KEY=<path>, e.g. ~/.ssh/aur_faultkit). checksums.txt is
+# signed keyless with cosign, which opens a browser for the Sigstore OIDC
+# login — sign in with the identity documented in the README's "Verify a
+# release" section.
 # Tag and push first, then `make release`.
 GORELEASER_VERSION := v2.16.0
 COSIGN_VERSION := v3.1.3
@@ -101,7 +101,7 @@ release:
 		exit 1; \
 	}
 	@test -n "$$AUR_KEY" || { \
-		echo "set AUR_KEY to the AUR ssh key path, e.g. AUR_KEY=~/.ssh/aur_key make release"; \
+		echo "set AUR_KEY to the AUR ssh key path, e.g. AUR_KEY=~/.ssh/aur_faultkit make release"; \
 		exit 1; \
 	}
 	GITHUB_TOKEN="$$(gh auth token)" goreleaser release --clean
