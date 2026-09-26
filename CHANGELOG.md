@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The README drops the Roadmap and faultkit Pro sections.
 - The README opens with a GIF of a real Claude Code session: review,
   prove-all, and harden on a helpdesk triage agent.
+- The README's quick install is `curl -fsSL https://faultkit.dev/install.sh | sh`.
+  The script checks the release checksum, and the signature on
+  `checksums.txt` when cosign is installed. The old `/install` URL was
+  never served.
 - SECURITY.md: private vulnerability reporting is enabled.
 
 ## [0.1.3] - 2026-09-26
