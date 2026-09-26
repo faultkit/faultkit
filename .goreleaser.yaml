@@ -42,6 +42,9 @@ checksum:
 # AUR PKGBUILD pin sha256 values from this same signed file. Runs from
 # the maintainer's machine: cosign opens a browser for the OIDC login,
 # and the signing identity is the maintainer's email.
+# --fulcio-auth-flow=normal is required: goreleaser runs cosign without a
+# terminal, so cosign would otherwise pick the device flow, and goreleaser
+# only prints its one-time code after the command has exited.
 signs:
   - cmd: cosign
     artifacts: checksum
@@ -51,6 +54,7 @@ signs:
       - "--bundle=${signature}"
       - "${artifact}"
       - --yes
+      - --fulcio-auth-flow=normal
 
 snapshot:
   version_template: "{{ incpatch .Version }}-next"
@@ -73,9 +77,10 @@ changelog:
 # `goreleaser release` — i.e. `make release` from a maintainer's machine
 # (the local-release model) — never in CI. No publish credential is ever
 # stored as a GitHub secret: AUR auth uses the AUR-specific SSH key
-# (AUR_KEY -> ~/.ssh/aur_key), and the Homebrew tap is pushed over the
-# maintainer's ambient GitHub SSH. Both download the public release
-# tarballs, so they only resolve once the repo is public (i.e. at launch).
+# (AUR_KEY -> ~/.ssh/aur_faultkit), and the Homebrew tap is updated
+# through the GitHub API with the maintainer's `gh` token. Both download
+# the public release tarballs, so they only resolve once the repo is
+# public (i.e. at launch).
 aurs:
   - name: faultkit-bin
     homepage: "https://faultkit.dev"
@@ -108,9 +113,10 @@ brews:
       owner: faultkit
       name: homebrew-tap
       branch: main
-      # Pushed over the maintainer's ambient GitHub SSH (no stored token).
-      git:
-        url: "ssh://git@github.com/faultkit/homebrew-tap.git"
+      # Committed through the GitHub API with GITHUB_TOKEN (the maintainer's
+      # gh token; make release sets it). A git-over-SSH block needs a
+      # private_key file, and without one goreleaser skips the tap silently
+      # ("private_key is empty"); that is what happened in v0.1.3.
     commit_author:
       name: faultkit-bot
       email: bot@faultkit.dev
