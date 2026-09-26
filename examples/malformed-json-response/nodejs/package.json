@@ -7,6 +7,6 @@
   },
   "dependencies": {
     "openai": "^5.0.0",
-    "undici": "^7.0.0"
+    "undici": "^7.29.1"
   }
 }
