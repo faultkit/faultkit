@@ -91,7 +91,7 @@ The failure mode: your agent retries an OpenAI call after a `429`, but the retry
 
 ```bash
 # Install (macOS / Linux)
-curl -sSL https://faultkit.dev/install | sh
+curl -fsSL https://faultkit.dev/install.sh | sh
 
 # Run your tests with 20% of OpenAI calls returning 429
 faultkit run --scenario llm-api-degraded -- pytest tests/agent/
@@ -302,8 +302,15 @@ Schema reference: [docs.faultkit.dev/scenarios](https://faultkit.dev/docs/scenar
 
 ```bash
 # macOS, Linux
-curl -sSL https://faultkit.dev/install | sh
+curl -fsSL https://faultkit.dev/install.sh | sh
 ```
+
+The script installs the release for your platform into `~/.local/bin`
+without sudo. It refuses a tarball that doesn't match the release's
+`checksums.txt`, and with cosign installed it first verifies that file's
+signature (see **Verify a release** below). Set `FAULTKIT_VERSION` to pin a
+release or `FAULTKIT_INSTALL_DIR` to install elsewhere. Read it first at
+<https://faultkit.dev/install.sh>.
 
 **From a release**
 
