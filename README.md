@@ -41,16 +41,17 @@ can also prove that it fails safely. In Claude Code:
 | Command | What it does |
 |---|---|
 | `/faultkit:review` | Maps your action boundaries and counts the business invariants a fault can prove. Changes no code. |
-| `/faultkit:run-all` | Proves every invariant under fault and reports one proof state per invariant. |
+| `/faultkit:prove-all` | Proves every invariant under fault and reports one proof state per invariant. |
 | `/faultkit:harden` | Adds the smallest guard at the boundary, proves it again, and asks before opening a pull request. |
-| `/faultkit:run` | Proves one invariant, e.g. `/faultkit:run a paid invoice is never sent to collections -- pytest -q`. |
+| `/faultkit:prove` | Proves one invariant, e.g. `/faultkit:prove a paid invoice is never sent to collections -- pytest -q`. |
+| `/faultkit:run` | The same as `/faultkit:prove-all`. |
 
 A session on a Node + LangChain support-triage agent whose keyword fallback
 quietly filed a checkout outage as a next-day billing ticket:
 
 ```text
-> /faultkit:run-all
-=== run-all ===
+> /faultkit:prove-all
+=== prove-all ===
 invariant     fired  exit  proof state
 guess-held        6     1  silent failure confirmed
 sla-required      1     1  silent failure confirmed
@@ -59,8 +60,8 @@ p0-incident       1     1  silent failure confirmed
 > /faultkit:harden
 Invariants: 3 found, 3 not yet guarded.
 
-> /faultkit:run-all
-=== run-all ===
+> /faultkit:prove-all
+=== prove-all ===
 invariant     fired  exit  proof state
 guess-held        6     0  invariant proven under fault
 sla-required      1     0  invariant proven under fault
@@ -419,7 +420,7 @@ under fault:
 ```yaml
 - name: Prove invariants
   run: |
-    curl -fsSLo run_faultkit.py https://raw.githubusercontent.com/faultkit/skills/16729b863630b5339d4faca7cf0895b84e56591c/faultkit/scripts/run_faultkit.py
+    curl -fsSLo run_faultkit.py https://raw.githubusercontent.com/faultkit/skills/b17c31ebe4241111756c86c3c5bc415ed9aedc05/faultkit/scripts/run_faultkit.py
     python3 run_faultkit.py --manifest .faultkit/invariants/manifest.json
 ```
 
@@ -441,12 +442,9 @@ More CI recipes: [examples/](./examples/).
 - eBPF injector with `flaky-network`, `tool-permission-denied`
 - YAML scenario loading, auto-mode selection, `faultkit check` (lists modes and providers), distinct exit codes
 - GitHub Actions integration
-- A skill for coding agents ([faultkit/skills](https://github.com/faultkit/skills)): `review`, `harden`, `run`, `run-all`, with proven invariants kept in `.faultkit/invariants/`
-
-**Next release (v0.1.3)**
-
-- `report/v1` with a verdict block, and `--json`
-- Keyless-signed releases (Sigstore cosign)
+- A skill for coding agents ([faultkit/skills](https://github.com/faultkit/skills)): `review`, `harden`, `prove`, `prove-all`, with proven invariants kept in `.faultkit/invariants/`
+- `report/v1` with a verdict block, and `--json` (v0.1.3)
+- Keyless-signed releases with Sigstore cosign (v0.1.3)
 
 **Beyond the CLI (next)**
 
