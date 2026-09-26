@@ -13,7 +13,7 @@
 
 </div>
 
-> **Status:** v0.1 — fourteen scenarios end-to-end (LLM, Anthropic-specific, Bedrock-specific, and syscall-level). See [roadmap](#roadmap) for what ships next.
+> **Status:** v0.1 — fourteen scenarios end-to-end (LLM, Anthropic-specific, Bedrock-specific, and syscall-level).
 > **Platforms:** macOS and Linux for HTTP scenarios. Linux 5.8+ (x86-64) for syscall-level scenarios.
 
 ---
@@ -192,7 +192,7 @@ intact but base-URL mode would break, so `--base-url` doesn't target it.
 | `slow-dns` | 500–5000ms delay on resolution, intermittent `EAI_AGAIN` | 🛣️ |
 | `fd-exhaustion` | `EMFILE` after N open descriptors | 🛣️ |
 
-✅ = working in v0.1 today · 🛣️ = on the v0.2 / v0.3 roadmap
+✅ = working in v0.1 today · 🛣️ = planned
 
 All scenarios are free and open source. Forever.
 
@@ -428,59 +428,6 @@ A GitHub Action, `faultkit/action@v1`, is coming: the same replay as one
 step, with the proof table posted on the pull request.
 
 More CI recipes: [examples/](./examples/).
-
----
-
-## Roadmap
-
-**Shipped (v0.1)**
-
-- HTTPS proxy injector with the LLM failure modes (`llm-api-degraded`, `malformed-json-response`, `malformed-tool-use`, `max-tokens-truncation`, `llm-streaming-cutoff`)
-- Anthropic-specific scenarios (`anthropic-overloaded`, `anthropic-stream-error`, `anthropic-tool-use-cutoff`, `anthropic-refusal`, `anthropic-request-too-large`)
-- Amazon Bedrock provider (forward-proxy only) — the shared LLM modes fan out to it, plus Bedrock-specific `bedrock-model-timeout`, `bedrock-service-unavailable`
-- Failure-mode × provider model (OpenAI, Anthropic, Bedrock) with `--provider` selection, plus base-URL injection (`--base-url`)
-- eBPF injector with `flaky-network`, `tool-permission-denied`
-- YAML scenario loading, auto-mode selection, `faultkit check` (lists modes and providers), distinct exit codes
-- GitHub Actions integration
-- A skill for coding agents ([faultkit/skills](https://github.com/faultkit/skills)): `review`, `harden`, `prove`, `prove-all`, with proven invariants kept in `.faultkit/invariants/`
-- `report/v1` with a verdict block, and `--json` (v0.1.3)
-- Keyless-signed releases with Sigstore cosign (v0.1.3)
-
-**Beyond the CLI (next)**
-
-- `faultkit/action@v1`: replays the skill's invariants in CI and posts the proof table on the pull request
-- `docs/agents.md`: driving faultkit from any coding agent with exit codes and `--json`
-
-**Next (v0.2)** — the 🛣️ items in [Scenarios](#scenarios), sequenced by capability
-
-- New LLM failure modes: `llm-empty-response`, `llm-slow-first-token`, `context-window-overflow`
-- A latency / hang fault primitive (powers `tool-slow`, `gateway-timeout`, `subagent-timeout`, `slow-dns`)
-- RAG / vector-DB scenarios: `rag-stale-results`, `embeddings-degraded`
-- Agent-orchestration scenarios: `mcp-tool-schema-mismatch`, `subagent-timeout`, `memory-write-failure`
-- Subprocess stdout faults (`tool-call-flaky`, `partial-tool-result`) via the LD_PRELOAD / DYLD shim
-- More backend syscall scenarios: `disk-full`, `fd-exhaustion`
-
-**Later (v0.3+)**
-
-- Coverage reporting — which syscalls / endpoints did your service actually hit?
-- Scenario packs for specific stacks (LangChain, LlamaIndex, AWS SDK)
-- Observability correlation (Datadog, Sentry, Grafana, Honeycomb)
-- Exploratory: uprobe-based TLS interception for environments where a proxy isn't viable
-
----
-
-## faultkit Pro
-
-The OSS core is free for individuals and open-source projects, forever. **Pro** is for teams standardizing resilience testing across an organization. It's not built yet — features ship after the v0.1 community proves the wedge. The likely shape:
-
-- Scenario packs for specific stacks and agent frameworks
-- Regression tracking across CI builds
-- Blast-radius controls for staging / production
-- Observability correlation
-- Team dashboards
-- Compliance evidence (SOC 2 CC7.2, ISO 27001 A.17, DORA Article 25)
-
-Interested? [Get on the list →](https://faultkit.dev/pro)
 
 ---
 

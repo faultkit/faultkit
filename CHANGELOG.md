@@ -11,8 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The README names the faultkit skill's renamed commands: `/faultkit:prove`
   and `/faultkit:prove-all` (`/faultkit:run` is the same as `prove-all`). The
-  CI replay step pins a helper that downloads faultkit v0.1.3, and the
-  roadmap lists v0.1.3 as shipped.
+  CI replay step pins a helper that downloads faultkit v0.1.3.
+- The README drops the Roadmap and faultkit Pro sections.
 - SECURITY.md: private vulnerability reporting is enabled.
 
 ## [0.1.3] - 2026-09-26
