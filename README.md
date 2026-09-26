@@ -9,7 +9,7 @@
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Website](https://img.shields.io/badge/website-faultkit.dev-brightgreen.svg)](https://faultkit.dev)
 
-[Install](#install) · [60-second demo](#60-second-demo) · [Scenarios](#scenarios) · [How it works](#how-it-works) · [Docs](https://faultkit.dev/#docs)
+[Install](#install) · [Coding agents](#from-your-coding-agent) · [60-second demo](#60-second-demo) · [Scenarios](#scenarios) · [How it works](#how-it-works) · [Docs](https://faultkit.dev/#docs)
 
 </div>
 
@@ -25,6 +25,58 @@ Your agent chains LLM calls, tool subprocesses, RAG lookups, HTTP requests. One 
 The retry logic for a `429` from OpenAI mid-chain. The cleanup when a tool subprocess gets `SIGPIPE`'d. The fallback when your vector DB returns shuffled results. **You wrote that code. You've never seen it run.**
 
 faultkit deterministically triggers the failures your agents hit in production, so you can fix them before your users do.
+
+---
+
+## From your coding agent
+
+faultkit ships a skill for coding agents, so the agent that writes your code
+can also prove that it fails safely. In Claude Code:
+
+```text
+/plugin marketplace add faultkit/skills
+/plugin install faultkit@faultkit
+```
+
+| Command | What it does |
+|---|---|
+| `/faultkit:review` | Maps your action boundaries and counts the business invariants a fault can prove. Changes no code. |
+| `/faultkit:run-all` | Proves every invariant under fault and reports one proof state per invariant. |
+| `/faultkit:harden` | Adds the smallest guard at the boundary, proves it again, and asks before opening a pull request. |
+| `/faultkit:run` | Proves one invariant, e.g. `/faultkit:run a paid invoice is never sent to collections -- pytest -q`. |
+
+A session on a Node + LangChain support-triage agent whose keyword fallback
+quietly filed a checkout outage as a next-day billing ticket:
+
+```text
+> /faultkit:run-all
+=== run-all ===
+invariant     fired  exit  proof state
+guess-held        6     1  silent failure confirmed
+sla-required      1     1  silent failure confirmed
+p0-incident       1     1  silent failure confirmed
+
+> /faultkit:harden
+Invariants: 3 found, 3 not yet guarded.
+
+> /faultkit:run-all
+=== run-all ===
+invariant     fired  exit  proof state
+guess-held        6     0  invariant proven under fault
+sla-required      1     0  invariant proven under fault
+p0-incident       1     0  invariant proven under fault
+```
+
+With your consent, every proven invariant is kept in `.faultkit/invariants/`:
+one scenario per invariant and a `manifest.json` that names its gate test,
+so CI replays the same proofs (see [CI integration](#ci-integration)).
+Without it, the proof goes to a temporary workspace and your project is left
+untouched.
+
+The skill follows the [Agent Skills](https://agentskills.io) standard, so
+agents that read `.agents/skills/` (Codex, Cursor, and others) can load it
+too. Claude Code is the tested path so far. For installing it in other
+agents, and the full reference, see [faultkit/skills](https://github.com/faultkit/skills).
 
 ---
 
@@ -268,6 +320,23 @@ yay -S faultkit-bin                   # Arch (AUR)
 go install github.com/faultkit/faultkit/cmd/faultkit@latest
 ```
 
+**Verify a release**
+
+Starting with v0.1.3, every release's `checksums.txt` is signed keyless with
+[Sigstore cosign](https://docs.sigstore.dev/); the signature bundle ships
+next to it as `checksums.txt.sigstore.json`. The Homebrew formula and the
+AUR package pin the sha256 values from that signed file. To check a
+downloaded tarball yourself (cosign v2.4+):
+
+```bash
+cosign verify-blob \
+  --bundle checksums.txt.sigstore.json \
+  --certificate-identity cenk.kalpakoglu@gmail.com \
+  --certificate-oidc-issuer https://accounts.google.com \
+  checksums.txt
+sha256sum --ignore-missing -c checksums.txt   # macOS: shasum -a 256 --ignore-missing -c
+```
+
 **Requirements**
 
 - **Proxy-mode scenarios**: any platform with a working Go runtime. No privileges.
@@ -333,6 +402,30 @@ GitHub Actions example:
   run: faultkit run --scenario llm-api-degraded -- pytest tests/agent/
 ```
 
+**Machine-readable reports (v0.1.3+).** `--json` prints a `report/v1`
+document to stdout (the human summary and the target's output go to
+stderr), and `--report path` writes the same document to a file. Its
+`verdict.state` comes from the same facts as the exit code, so the two never
+disagree:
+
+- `invariant_proven_under_fault`: a fault fired and the target held
+- `silent_failure_confirmed`: a fault fired and the target failed
+- `invalid_evidence`: no fault fired, so the run proves nothing
+
+**Replaying the skill's invariants.** One step replays everything in
+`.faultkit/invariants/`, and it exits 0 only when every invariant was proven
+under fault:
+
+```yaml
+- name: Prove invariants
+  run: |
+    curl -fsSLo run_faultkit.py https://raw.githubusercontent.com/faultkit/skills/16729b863630b5339d4faca7cf0895b84e56591c/faultkit/scripts/run_faultkit.py
+    python3 run_faultkit.py --manifest .faultkit/invariants/manifest.json
+```
+
+A GitHub Action, `faultkit/action@v1`, is coming: the same replay as one
+step, with the proof table posted on the pull request.
+
 More CI recipes: [examples/](./examples/).
 
 ---
@@ -348,6 +441,17 @@ More CI recipes: [examples/](./examples/).
 - eBPF injector with `flaky-network`, `tool-permission-denied`
 - YAML scenario loading, auto-mode selection, `faultkit check` (lists modes and providers), distinct exit codes
 - GitHub Actions integration
+- A skill for coding agents ([faultkit/skills](https://github.com/faultkit/skills)): `review`, `harden`, `run`, `run-all`, with proven invariants kept in `.faultkit/invariants/`
+
+**Next release (v0.1.3)**
+
+- `report/v1` with a verdict block, and `--json`
+- Keyless-signed releases (Sigstore cosign)
+
+**Beyond the CLI (next)**
+
+- `faultkit/action@v1`: replays the skill's invariants in CI and posts the proof table on the pull request
+- `docs/agents.md`: driving faultkit from any coding agent with exit codes and `--json`
 
 **Next (v0.2)** — the 🛣️ items in [Scenarios](#scenarios), sequenced by capability
 

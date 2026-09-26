@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Signed releases.** `checksums.txt` is now signed keyless with
+  Sigstore cosign and published with a `checksums.txt.sigstore.json`
+  bundle. The Homebrew formula and AUR package pin sha256 values from
+  that signed file. Verification steps are in the README.
+
 ## [0.1.2] - 2026-06-18
 
 The second maintenance release. The headline is **base-URL injection** —

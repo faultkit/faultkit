@@ -70,6 +70,8 @@ aur_key*
 
 # Internal strategy doc — kept locally for reference, not published.
 PROJECT_PLAN.md
+# Multi-agent (Codex, Cursor) roadmap — local working doc, not published.
+CODEX_ROADMAP.md
 
 # Local pre-redesign roadmap archive (not for upstream)
 .archive/
