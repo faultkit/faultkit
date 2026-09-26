@@ -6,9 +6,7 @@
 issues, discussions, or pull requests.**
 
 Report privately via GitHub's **Private Vulnerability Reporting**: the
-repository's **Security** tab → **Report a vulnerability**. (Maintainers:
-enable this under Settings → Code security → Private vulnerability
-reporting.)
+repository's **Security** tab → **Report a vulnerability**.
 
 We aim to acknowledge a report within 3 business days and to share a
 remediation timeline after triage. Please allow a reasonable window for a
