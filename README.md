@@ -424,9 +424,29 @@ disagree:
 - `silent_failure_confirmed`: a fault fired and the target failed
 - `invalid_evidence`: no fault fired, so the run proves nothing
 
-**Replaying the skill's invariants.** One step replays everything in
-`.faultkit/invariants/`, and it exits 0 only when every invariant was proven
-under fault:
+**Replaying the skill's invariants.** On GitHub Actions,
+[faultkit/action](https://github.com/faultkit/action) replays everything in
+`.faultkit/invariants/` with a pinned, sha256-verified faultkit. It fails the
+job when an invariant no longer holds, and it posts the proof table on the
+pull request:
+
+```yaml
+permissions:
+  contents: read
+  pull-requests: write # only for the PR comment
+
+steps:
+  - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+    with:
+      persist-credentials: false
+  # Install what your gates need first, e.g. actions/setup-node + npm ci.
+  - uses: faultkit/action@48f7baf9cedc33be5d4afeb4d9fd9b92f686b912 # v1.0.0
+    with:
+      github-token: ${{ github.token }}
+```
+
+In other CI systems, one step replays the same proofs. It exits 0 only when
+every invariant was proven under fault:
 
 ```yaml
 - name: Prove invariants
@@ -434,9 +454,6 @@ under fault:
     curl -fsSLo run_faultkit.py https://raw.githubusercontent.com/faultkit/skills/b17c31ebe4241111756c86c3c5bc415ed9aedc05/faultkit/scripts/run_faultkit.py
     python3 run_faultkit.py --manifest .faultkit/invariants/manifest.json
 ```
-
-A GitHub Action, `faultkit/action@v1`, is coming: the same replay as one
-step, with the proof table posted on the pull request.
 
 More CI recipes: [examples/](./examples/).
 
