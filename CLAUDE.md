@@ -81,24 +81,16 @@ it work") require constant clarification.
 These are non-negotiable. They encode architectural decisions that aren't
 re-litigated session to session.
 
-### The OSS/Pro boundary
+### Open source, all of it
 
-faultkit is split across two repos:
+faultkit is open source under Apache 2.0, and every feature ships in this
+repo. No feature flags, license checks, or stub commands that point at
+functionality kept somewhere else.
 
-- `github.com/faultkit/faultkit` — public, Apache 2.0, this repo
-- `github.com/faultkit/faultkit-pro` — private, commercial license, separate
-
-**The OSS repo must contain zero Pro-aware code.** No Pro mentions in
-comments, no Pro feature flags, no `if isPro` branches, no stub commands
-that say "this is a Pro feature." The OSS code must not know Pro exists.
-
-The seam is `pkg/extension`. It is generic — Pro is one of many possible
-wrappers. If you find yourself adding Pro-specific affordances to OSS
-code, stop. The right answer is to add a generic capability to
-`pkg/extension` that the Pro repo (which you don't have access to) uses.
-
-If you're unsure whether something is Pro: it probably is. Ask before
-adding.
+`pkg/extension` is the public extension API for tools that wrap or embed
+faultkit. Keep it generic: the core never special-cases one particular
+downstream project. If a wrapper needs something the core doesn't expose,
+add a generic capability to `pkg/extension`.
 
 ### What goes where
 
@@ -251,8 +243,8 @@ don't add code "in case we need it later":
 - Per-language SDKs (Python, Node, etc.) — CLI + YAML covers it
 - Interactive TUI mode
 - Long-running daemon / serve mode (we are single-shot)
-- Per-feature license keys, license validation logic
-- BSL/SSPL/Elastic License experiments
+- License changes, license keys, or gated features: faultkit stays
+  Apache 2.0
 - Telemetry, analytics, "phone home" of any kind
 
 If a request leans into any of these, surface the scope question before
@@ -318,11 +310,12 @@ understand. Stop and ask.
 
 ### What this project is for (context for judgment calls)
 
-faultkit is a side project with three goals: personal brand, evaluate
-the OSS-core game, see commercial potential. It is NOT a venture-backed
-startup. Decisions favor: shipping over polish, narrow scope over
-completeness, individual developer experience over enterprise
-checklists, two weekends a month of total effort.
+faultkit is an open-source tool for developers who build AI
+applications: it proves that an application keeps its business
+invariants when a dependency fails. It succeeds when developers adopt it
+and trust its verdicts. Decisions favor: shipping over polish, narrow
+scope over completeness, the individual developer's experience, and a
+small maintainer effort.
 
 When a judgment call comes up that isn't covered by these rules, lean
 toward whatever lets a small team ship a v0.1 sooner. Don't over-engineer

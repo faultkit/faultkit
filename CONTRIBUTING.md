@@ -8,7 +8,7 @@ contributions; this document is the short version of how to land one.
 - For anything beyond a typo or small bug fix, open an issue first.
   This avoids the case where you write a patch that ends up out of scope.
 - Read `CLAUDE.md` if you're going to touch code. It encodes the
-  project's non-negotiables (the OSS/Pro boundary, no new dependencies
+  project's non-negotiables (no gated features, no new dependencies
   without approval, exit-code stability, etc.).
 - v0.1 is intentionally narrow. See `docs/internal/V0.1_SPEC.md` for
   what's in scope right now.
