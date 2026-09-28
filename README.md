@@ -428,7 +428,8 @@ disagree:
 [faultkit/action](https://github.com/faultkit/action) replays everything in
 `.faultkit/invariants/` with a pinned, sha256-verified faultkit. It fails the
 job when an invariant no longer holds, and it posts the proof table on the
-pull request:
+pull request, with the coverage of the outcomes declared in
+`.faultkit/values.md`:
 
 ```yaml
 permissions:
@@ -440,10 +441,13 @@ steps:
     with:
       persist-credentials: false
   # Install what your gates need first, e.g. actions/setup-node + npm ci.
-  - uses: faultkit/action@48f7baf9cedc33be5d4afeb4d9fd9b92f686b912 # v1.0.0
+  - uses: faultkit/action@97410fbd6eea8b15ed7afbda3204cbd71f7ad918 # v1.1.0
     with:
       github-token: ${{ github.token }}
 ```
+
+In a monorepo, set `working-directory` to the project's directory. The other
+inputs are in the [action's README](https://github.com/faultkit/action#inputs).
 
 In other CI systems, one step replays the same proofs. It exits 0 only when
 every invariant was proven under fault:
@@ -451,7 +455,7 @@ every invariant was proven under fault:
 ```yaml
 - name: Prove invariants
   run: |
-    curl -fsSLo run_faultkit.py https://raw.githubusercontent.com/faultkit/skills/b17c31ebe4241111756c86c3c5bc415ed9aedc05/faultkit/scripts/run_faultkit.py
+    curl -fsSLo run_faultkit.py https://raw.githubusercontent.com/faultkit/skills/b6e3b40eac4dd55585aeeaf65f9a17344584f7ba/faultkit/scripts/run_faultkit.py
     python3 run_faultkit.py --manifest .faultkit/invariants/manifest.json
 ```
 
