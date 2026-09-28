@@ -11,9 +11,9 @@
 
 [Install](#install) · [Coding agents](#from-your-coding-agent) · [60-second demo](#60-second-demo) · [Scenarios](#scenarios) · [How it works](#how-it-works) · [Docs](https://faultkit.dev/#docs)
 
-<img src="assets/skill-demo.gif" alt="A Claude Code session on a helpdesk triage agent: /faultkit:review finds two invariants, /faultkit:prove-all confirms both fail silently under injected faults, and /faultkit:harden guards them and proves them under the same faults.">
+<img src="assets/skill-demo.gif" alt="A Claude Code session on a helpdesk triage agent: /faultkit:values declares one outcome that must never happen, /faultkit:review finds three invariants that protect it, /faultkit:prove-all confirms all three fail silently under injected faults, /faultkit:harden guards them, and /faultkit:prove-all proves them under the same faults.">
 
-<sub>A real Claude Code session with the [faultkit skill](#from-your-coding-agent) on a helpdesk triage agent: `/faultkit:review` → `/faultkit:prove-all` → `/faultkit:harden`. Waits are cut.</sub>
+<sub>A real Claude Code session (Fable 5.1) with the [faultkit skill](#from-your-coding-agent) on a helpdesk triage agent: `/faultkit:values` → `/faultkit:review` → `/faultkit:prove-all` → `/faultkit:harden` → `/faultkit:prove-all`. Waits are cut: about ten minutes of work in 1:42. The agent under test runs on a local mock model; faultkit injects the faults.</sub>
 
 </div>
 
@@ -44,32 +44,55 @@ can also prove that it fails safely. In Claude Code:
 
 | Command | What it does |
 |---|---|
+| `/faultkit:values` | Writes `.faultkit/values.md` from your words: the business value and the outcomes that must never happen. Review, `/faultkit:prove-all`, and CI then report which outcomes are covered. |
 | `/faultkit:review` | Maps your action boundaries and counts the business invariants a fault can prove. Changes no code. |
 | `/faultkit:prove-all` | Proves every invariant under fault and reports one proof state per invariant. |
 | `/faultkit:harden` | Adds the smallest guard at the boundary, proves it again, and asks before opening a pull request. |
 | `/faultkit:prove` | Proves one invariant, e.g. `/faultkit:prove a paid invoice is never sent to collections -- pytest -q`. |
 | `/faultkit:run` | The same as `/faultkit:prove-all`. |
 
-A session on a Node + LangChain support-triage agent whose keyword fallback
-quietly filed a checkout outage as a next-day billing ticket:
+A session on [incident-response-agent](https://github.com/faultkit/incident-response-agent),
+a sample on-call agent in Python + LangChain that you can try it on. One
+outcome goes in by hand, review finds three more in the code, and the first
+proof shows that all four fail silently:
 
 ```text
+> /faultkit:values Customers can always check out, and when they can't, a person is on it within minutes. A real outage must never be closed as a false alarm without paging anyone.
+- UO-1: A real outage is closed as a false alarm without paging anyone.
+
+> /faultkit:review
+Outcomes: 1 declared, 1 covered, 3 proposed. Invariants: 4 found, 4 provable with faultkit.
+
+> /faultkit:values
+- UO-2: A real outage ends with nobody paged.
+- UO-3: Customers aren't told checkout is down, and the responder reports that they were.
+- UO-4: A healthy deploy is rolled back.
+
 > /faultkit:prove-all
 === prove-all ===
-invariant     fired  exit  proof state
-guess-held        6     1  silent failure confirmed
-sla-required      1     1  silent failure confirmed
-p0-incident       1     1  silent failure confirmed
+invariant                        fired  exit  proof state
+no-false-alarm-without-metrics       3     1  silent failure confirmed
+outage-always-reaches-a-person       1     1  silent failure confirmed
+status-page-failure-is-reported      1     1  silent failure confirmed
+rollback-only-newest-deploy         15     1  silent failure confirmed
 
 > /faultkit:harden
-Invariants: 3 found, 3 not yet guarded.
+Invariants: 4 found, 4 not yet guarded.
 
 > /faultkit:prove-all
 === prove-all ===
-invariant     fired  exit  proof state
-guess-held        6     0  invariant proven under fault
-sla-required      1     0  invariant proven under fault
-p0-incident       1     0  invariant proven under fault
+invariant                        fired  exit  proof state
+no-false-alarm-without-metrics       6     0  invariant proven under fault
+outage-always-reaches-a-person       1     0  invariant proven under fault
+status-page-failure-is-reported      1     0  invariant proven under fault
+rollback-only-newest-deploy         15     0  invariant proven under fault
+=== outcomes ===
+outcome  worst state                   invariants
+UO-1     invariant proven under fault  no-false-alarm-without-metrics
+UO-2     invariant proven under fault  outage-always-reaches-a-person
+UO-3     invariant proven under fault  status-page-failure-is-reported
+UO-4     invariant proven under fault  rollback-only-newest-deploy
+declared 4, covered 4, uncovered 0, unlinked invariants 0
 ```
 
 With your consent, every proven invariant is kept in `.faultkit/invariants/`:
