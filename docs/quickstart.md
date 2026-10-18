@@ -45,8 +45,11 @@ anthropic-stream-error       [proxy]  Anthropic SSE stream emits an error event 
 anthropic-tool-use-cutoff    [proxy]  Anthropic returns a tool_use block truncated by max_tokens (stop_reason max_tokens, not tool_use) — the tool call is incomplete.
 bedrock-model-timeout        [proxy]  Bedrock returns HTTP 408 ModelTimeoutException — the model did not respond in time.
 bedrock-service-unavailable  [proxy]  Bedrock returns HTTP 503 ServiceUnavailableException under load.
+context-window-overflow      [proxy]  LLM provider rejects the request as over the model's context window with HTTP 400 (OpenAI context_length_exceeded; Anthropic invalid_request_error "prompt is too long"; Bedrock ValidationException).
+embeddings-degraded          [proxy]  Embeddings endpoint returns HTTP 503 (OpenAI /v1/embeddings; Bedrock embedding-model invoke with ServiceUnavailableException).
 flaky-network                [ebpf]   Inject ECONNRESET on TCP recv, simulating flaky network conditions.
 llm-api-degraded             [proxy]  Rate-limit requests to OpenAI and Anthropic (HTTP 429, Retry-After 30) and Bedrock (HTTP 429 ThrottlingException).
+llm-empty-response           [proxy]  LLM returns 200 with no usable content (OpenAI content null with finish_reason content_filter; Anthropic and Bedrock empty content with stop reason end_turn).
 llm-streaming-cutoff         [proxy]  Streaming chat completion drops the connection mid-token (OpenAI SSE without [DONE]; Anthropic SSE without message_stop).
 malformed-json-response      [proxy]  LLM returns 200 OK with syntactically invalid JSON in the body.
 malformed-tool-use           [proxy]  LLM returns a tool call with malformed or schema-violating arguments, breaking tool dispatch.
@@ -59,9 +62,11 @@ needs. Proxy works everywhere; eBPF needs Linux 5.8+.
 
 Each LLM scenario fires against every provider that has a fixture for its
 failure mode (OpenAI, Anthropic, and Bedrock; `llm-streaming-cutoff` has no
-Bedrock fixture); add `--provider anthropic` to narrow to one. The
-`anthropic-*` scenarios are Anthropic-only, and the `bedrock-*` scenarios are
-Bedrock-only. See [docs/scenarios.md](./scenarios.md#failure-modes-and-providers).
+Bedrock fixture, and `embeddings-degraded` has no Anthropic fixture because
+Anthropic has no embeddings API); add `--provider anthropic` to narrow to
+one. The `anthropic-*` scenarios are Anthropic-only, and the `bedrock-*`
+scenarios are Bedrock-only. See
+[docs/scenarios.md](./scenarios.md#failure-modes-and-providers).
 
 To see a scenario's full YAML:
 
