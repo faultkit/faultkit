@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`llm-empty-response` scenario** (failure mode `empty-response`). A 200
+  with valid JSON and no content: OpenAI `content: null` with
+  `finish_reason: "content_filter"`; Anthropic and Bedrock Converse an empty
+  content array with an ordinary `end_turn` stop reason. Like the other
+  200-body scenarios it returns a non-streaming JSON response, so it targets
+  non-streaming calls.
+- **`embeddings-degraded` scenario** (failure mode `embeddings-unavailable`).
+  OpenAI `/v1/embeddings` returns 503, and Bedrock `InvokeModel` on embedding
+  models (`/model/*embed*/invoke`) returns 503 `ServiceUnavailableException`.
+  Chat and Converse calls pass through. There is no Anthropic fixture,
+  because Anthropic has no embeddings API.
+- **`context-window-overflow` scenario** (failure mode
+  `context-length-exceeded`). The provider rejects the request as over the
+  model's context window with HTTP 400: OpenAI `invalid_request_error` with
+  code `context_length_exceeded`, Anthropic `invalid_request_error` "prompt
+  is too long", Bedrock Converse `ValidationException`. The bodies come from
+  the fixture, so a raw `http_status: 400` fault still returns the same body
+  as before. The roadmap used to describe this scenario as silent prompt
+  truncation; it is a provider rejection.
+
 ### Build / supply chain
 
 - **Go 1.26.9 and `golang.org/x/net` v0.60.0** fix nine vulnerabilities

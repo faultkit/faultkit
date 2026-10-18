@@ -157,9 +157,9 @@ Bedrock fixture (OpenAI and Anthropic only). Narrow to one with `--provider`.
 | `malformed-tool-use` | Tool call with malformed / schema-violating arguments, breaking dispatch | ✅ |
 | `max-tokens-truncation` | 200 with truncated content (`finish_reason: length` / `stop_reason: max_tokens`) an agent treats as complete | ✅ |
 | `llm-streaming-cutoff` | Drop the SSE connection mid-stream after N tokens | ✅ |
-| `llm-empty-response` | 200 OK, valid JSON, content is an empty string / null (guardrail-triggered) | 🛣️ |
+| `llm-empty-response` | 200 OK, valid JSON, but no content: `content: null` + `finish_reason: content_filter` (OpenAI), or an empty `content` array with `end_turn` (Anthropic, Bedrock). Applies to non-streaming calls | ✅ |
 | `llm-slow-first-token` | Connection accepted, then 8–15s before the first token | 🛣️ |
-| `context-window-overflow` | Silently truncate the prompt at the SDK boundary | 🛣️ |
+| `context-window-overflow` | The provider rejects the request as over the model's context window: HTTP 400 (OpenAI `context_length_exceeded`, Anthropic `prompt is too long`, Bedrock `ValidationException`). Not silent truncation | ✅ |
 | `gateway-timeout` | LiteLLM / Portkey / custom gateway returns slow or hangs | 🛣️ |
 
 ### Anthropic-specific
@@ -191,7 +191,7 @@ intact but base-URL mode would break, so `--base-url` doesn't target it.
 | Scenario | What it does | Status |
 |---|---|:---:|
 | `rag-stale-results` | Pinecone / Weaviate / Qdrant returns stale or deleted-document results | 🛣️ |
-| `embeddings-degraded` | Embeddings endpoint returns 5xx intermittently | 🛣️ |
+| `embeddings-degraded` | Embeddings endpoint returns 503 (OpenAI `/v1/embeddings`; Bedrock embedding models, forward-proxy only) | ✅ |
 
 ### Tool calls and subprocesses
 

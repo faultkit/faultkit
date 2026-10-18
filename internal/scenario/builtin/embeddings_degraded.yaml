@@ -1,0 +1,6 @@
+name: embeddings-degraded
+description: Embeddings endpoint returns HTTP 503 (OpenAI /v1/embeddings; Bedrock embedding-model invoke with ServiceUnavailableException).
+experiments:
+  - name: embeddings-unavailable
+    failure: embeddings-unavailable
+    probability: 0.2

@@ -1,0 +1,6 @@
+name: llm-empty-response
+description: LLM returns 200 with no usable content (OpenAI content null with finish_reason content_filter; Anthropic and Bedrock empty content with stop reason end_turn).
+experiments:
+  - name: empty-content
+    failure: empty-response
+    probability: 0.15
