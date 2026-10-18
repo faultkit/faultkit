@@ -190,7 +190,7 @@ intact but base-URL mode would break, so `--base-url` doesn't target it.
 
 | Scenario | What it does | Status |
 |---|---|:---:|
-| `rag-stale-results` | Pinecone / Weaviate / Qdrant returns stale or deleted-document results | 🛣️ |
+| `rag-stale-results` | Pinecone / Qdrant Cloud query returns matches for nonexistent or deleted document ids (REST APIs, forward-proxy only; gRPC clients that honour the proxy fail to connect) | ✅ |
 | `embeddings-degraded` | Embeddings endpoint returns 503 (OpenAI `/v1/embeddings`; Bedrock embedding models, forward-proxy only) | ✅ |
 
 ### Tool calls and subprocesses
@@ -308,10 +308,12 @@ faultkit run --scenario malformed-json-response --provider anthropic -- pytest t
 ```
 
 Adding a new provider means adding a fixture, never a new scenario. faultkit
-knows three today — OpenAI, Anthropic, and **Amazon Bedrock** (forward-proxy
-only; its SigV4 auth survives the MITM proxy but rules out base-URL mode). Run
-`faultkit check` to see every registered provider and the modes it fires. The raw
-`fault` + `match` form (above) still works for fully custom scenarios.
+knows the LLM APIs OpenAI, Anthropic, and **Amazon Bedrock** (forward-proxy
+only; its SigV4 auth survives the MITM proxy but rules out base-URL mode), and
+the vector databases **Pinecone** and **Qdrant Cloud** (forward-proxy only, REST
+APIs). Run `faultkit check` to see every registered provider and the modes it
+fires. The raw `fault` + `match` form (above) still works for fully custom
+scenarios.
 
 Schema reference: [docs.faultkit.dev/scenarios](https://faultkit.dev/docs/scenarios).
 

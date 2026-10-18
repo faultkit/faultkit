@@ -1,0 +1,6 @@
+name: rag-stale-results
+description: Vector DB query (Pinecone, Qdrant) returns matches for deleted or nonexistent document ids.
+experiments:
+  - name: stale-matches
+    failure: stale-results
+    probability: 0.2

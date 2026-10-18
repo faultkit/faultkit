@@ -97,6 +97,15 @@ var catalog = map[string]map[string]Fixture{
 	"service-unavailable": {
 		"bedrock": {Path: "/model/*", Status: 503, Headers: map[string]string{"x-amzn-errortype": "ServiceUnavailableException"}},
 	},
+	// Vector-DB modes (forward-proxy only). The pinecone and qdrant providers
+	// have no base-URL env, so these fire only through HTTPS_PROXY. Single
+	// endpoint per provider: Pinecone's vector query and Qdrant's Query API
+	// (not the legacy /points/search, nor /points/query/batch, whose bodies
+	// differ).
+	"stale-results": {
+		"pinecone": {Path: "/query", Status: 200, Body: pineconeStaleResults},
+		"qdrant":   {Path: "/collections/*/points/query", Status: 200, Body: qdrantStaleResults},
+	},
 }
 
 // For returns the fixture for (mode, provider) and whether one exists.

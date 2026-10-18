@@ -54,6 +54,7 @@ llm-streaming-cutoff         [proxy]  Streaming chat completion drops the connec
 malformed-json-response      [proxy]  LLM returns 200 OK with syntactically invalid JSON in the body.
 malformed-tool-use           [proxy]  LLM returns a tool call with malformed or schema-violating arguments, breaking tool dispatch.
 max-tokens-truncation        [proxy]  LLM returns 200 with truncated content (finish_reason length / stop_reason max_tokens) an agent may treat as complete.
+rag-stale-results            [proxy]  Vector DB query (Pinecone, Qdrant) returns matches for deleted or nonexistent document ids.
 tool-permission-denied       [ebpf]   File operations fail with EACCES (permission denied).
 ```
 
@@ -64,8 +65,9 @@ Each LLM scenario fires against every provider that has a fixture for its
 failure mode (OpenAI, Anthropic, and Bedrock; `llm-streaming-cutoff` has no
 Bedrock fixture, and `embeddings-degraded` has no Anthropic fixture because
 Anthropic has no embeddings API); add `--provider anthropic` to narrow to
-one. The `anthropic-*` scenarios are Anthropic-only, and the `bedrock-*`
-scenarios are Bedrock-only. See
+one. The `anthropic-*` scenarios are Anthropic-only, the `bedrock-*`
+scenarios are Bedrock-only, and `rag-stale-results` targets the vector
+databases Pinecone and Qdrant Cloud. See
 [docs/scenarios.md](./scenarios.md#failure-modes-and-providers).
 
 To see a scenario's full YAML:

@@ -28,6 +28,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the fixture, so a raw `http_status: 400` fault still returns the same body
   as before. The roadmap used to describe this scenario as silent prompt
   truncation; it is a provider rejection.
+- **`rag-stale-results` scenario and the Pinecone and Qdrant providers.** A
+  vector query returns 200 with matches for document ids that don't exist
+  (deleted, or never indexed), in each vendor's documented response shape:
+  Pinecone `POST /query` on `*.pinecone.io` index hosts, and Qdrant's Query
+  API (`/collections/*/points/query`) on `*.cloud.qdrant.io` clusters. The new
+  failure mode is `stale-results`; `--provider pinecone` / `--provider qdrant`
+  narrow it. Both providers are forward-proxy only and REST only: `--base-url`
+  doesn't target them, and gRPC clients that honour the proxy settings fail
+  to connect, because the proxy only speaks HTTP/1.1.
 
 ### Build / supply chain
 

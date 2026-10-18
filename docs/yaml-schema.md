@@ -40,7 +40,7 @@ mode only uses a scenario's first syscall experiment.
   host/path/syscall). Use for custom scenarios.
 - **Fixture-driven** — a named `failure` mode, optionally narrowed to a
   `provider`, resolved against faultkit's per-provider fixture catalog.
-  Used by the builtin LLM scenarios.
+  Used by the builtin LLM and vector-DB scenarios.
 
 ### Raw form
 
@@ -77,7 +77,7 @@ narrow to one. Some modes are provider-specific and have only one fixture
 |---|---|---|---|
 | `name` | string | yes | Free-form identifier; appears in events and reports. |
 | `failure` | string | fixture-driven | A failure-mode id (e.g. `rate-limited`, `malformed-json`, `streaming-cutoff`). Mutually exclusive with `fault`/`match`. |
-| `provider` | string | no | Restrict a fixture-driven experiment to one provider id (`openai`, `anthropic`, `bedrock`). Only valid alongside `failure`. |
+| `provider` | string | no | Restrict a fixture-driven experiment to one provider id (`openai`, `anthropic`, `bedrock`, `pinecone`, `qdrant`; `faultkit check` lists them with their modes). Only valid alongside `failure`. |
 | `fault` | object | raw | What to inject. See [Fault](#fault). |
 | `match` | object | raw | When to inject. See [Match](#match). |
 | `probability` | float | yes | 0.0–1.0 inclusive. Independent dice roll per matched request (proxy) or syscall (eBPF). |
