@@ -2,7 +2,7 @@
 
 faultkit ships scenarios that map to real production failure modes in
 AI agent and backend systems. Each scenario is a YAML recipe that
-faultkit replays deterministically against your application, so you
+faultkit injects into your application while it runs, so you
 can verify your code survives failures you've written handlers for
 but never actually seen.
 

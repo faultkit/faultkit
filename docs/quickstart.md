@@ -1,6 +1,6 @@
 # Quickstart
 
-Five minutes from zero to a deterministic fault injection against your
+Five minutes from zero to your first fault injection against your
 own code.
 
 ---

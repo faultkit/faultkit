@@ -28,7 +28,7 @@ Your agent chains LLM calls, tool subprocesses, RAG lookups, HTTP requests. One 
 
 The retry logic for a `429` from OpenAI mid-chain. The cleanup when a tool subprocess gets `SIGPIPE`'d. The fallback when your vector DB returns shuffled results. **You wrote that code. You've never seen it run.**
 
-faultkit deterministically triggers the failures your agents hit in production, so you can fix them before your users do.
+faultkit triggers the failures your agents hit in production, so you can fix them before your users do.
 
 ---
 
