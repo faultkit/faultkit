@@ -18,8 +18,9 @@ faultkit version
 ```
 
 For Linux runners, that's enough for proxy mode. For eBPF scenarios,
-the runner also needs Linux 5.8+ and either root or `CAP_BPF` (GitHub
-Actions hosted runners satisfy both).
+the runner also needs Linux 5.8+ and either root or `CAP_BPF`,
+`CAP_NET_ADMIN`, and `CAP_PERFMON` (GitHub Actions hosted runners
+satisfy both).
 
 ## GitHub Actions
 

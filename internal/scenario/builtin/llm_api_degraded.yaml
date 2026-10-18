@@ -1,5 +1,5 @@
 name: llm-api-degraded
-description: Inject 429/503/timeout into requests to OpenAI, Anthropic, and Bedrock.
+description: Rate-limit requests to OpenAI and Anthropic (HTTP 429, Retry-After 30) and Bedrock (HTTP 429 ThrottlingException).
 experiments:
   - name: rate-limited
     failure: rate-limited

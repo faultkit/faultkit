@@ -40,6 +40,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `checksums.txt` when cosign is installed. The old `/install` URL was
   never served.
 - SECURITY.md: private vulnerability reporting is enabled.
+- The README and docs describe what the scenarios inject today:
+  `llm-api-degraded` returns HTTP 429 only (no 503s or timeouts),
+  `tool-permission-denied` returns `EACCES` only, and `flaky-network`
+  injects `ECONNRESET` without latency. The README demo shows the real run
+  summary, and the quickstart's `scenario list` output includes the Bedrock
+  scenarios.
+- The README presents the LD_PRELOAD shim as planned and drops
+  `--mode=shim`, which the CLI never accepted. On macOS, syscall scenarios
+  fail with exit code 2.
+- A run uses one injection mechanism, and the docs now say so: in a
+  scenario that mixes HTTP and syscall experiments, auto-mode runs only the
+  HTTP ones, and eBPF mode runs only the first syscall experiment. The
+  composed-scenario examples are HTTP-only.
+- docs/yaml-schema.md: `host` is required in practice, a declined dice roll
+  doesn't fall through to later experiments, `stream_cutoff_tokens` ignores
+  the other HTTP fault fields instead of rejecting them, `requires` isn't
+  enforced, and `bedrock` is a valid `provider`. docs/scenarios.md also says
+  `requires.platform` and `requires.kernel_min` aren't validated or enforced.
+- The README, docs/scenarios.md, and the quickstart say each LLM failure mode
+  fires for the providers that have a fixture for it: `llm-streaming-cutoff`
+  has no Bedrock fixture, so it fires for OpenAI and Anthropic only.
+- eBPF mode hooks kprobes, not tracepoints, and needs `CAP_PERFMON` as well
+  as `CAP_BPF` and `CAP_NET_ADMIN`; docs/scenarios.md, the quickstart, and
+  the CI guide now say so.
+- The README's scenario tables have a `Status` column instead of `v0.1`
+  (✅ = shipped, 🛣️ = planned), and the README and docs/scenarios.md no
+  longer count the scenarios. docs/scenarios.md calls its roadmap scenarios
+  planned, with no v0.2 date and no claim that they're tracked as issues.
 
 ## [0.1.3] - 2026-09-26
 

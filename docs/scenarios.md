@@ -6,22 +6,24 @@ faultkit replays deterministically against your application, so you
 can verify your code survives failures you've written handlers for
 but never actually seen.
 
-This document covers every scenario shipping in v0.1. For roadmap
-scenarios (v0.2 and beyond), see the bottom of this page.
+This document covers every scenario that ships today. For planned
+scenarios, see the bottom of this page.
 
 ---
 
 ## At a glance
 
-v0.1 ships fourteen scenarios. Twelve use HTTPS proxy injection (LLM
-failures); two use eBPF injection (Linux syscall-level failures).
+The LLM scenarios use HTTPS proxy injection; the syscall-level scenarios
+use eBPF injection (Linux).
 
-**Cross-provider LLM** — fire against OpenAI, Anthropic, and Bedrock; narrow with
-`--provider` (see [Failure modes and providers](#failure-modes-and-providers)):
+**Cross-provider LLM** — each fires against every provider that has a fixture for
+its failure mode: OpenAI, Anthropic, and Bedrock, except `llm-streaming-cutoff`,
+whose `streaming-cutoff` mode has no Bedrock fixture (OpenAI and Anthropic only).
+Narrow with `--provider` (see [Failure modes and providers](#failure-modes-and-providers)):
 
 | Scenario | Mode | What it tests |
 |---|---|---|
-| `llm-api-degraded` | proxy | LLM provider returns 429 / 503 / timeout |
+| `llm-api-degraded` | proxy | LLM provider returns HTTP 429 (rate limited) |
 | `malformed-json-response` | proxy | LLM returns syntactically invalid JSON |
 | `malformed-tool-use` | proxy | Tool call with malformed / schema-violating arguments |
 | `max-tokens-truncation` | proxy | Truncated 200 the agent treats as complete |
@@ -51,8 +53,8 @@ failures); two use eBPF injection (Linux syscall-level failures).
 | `flaky-network` | eBPF | TCP connections drop with `ECONNRESET` |
 | `tool-permission-denied` | eBPF | File operations fail with `EACCES` |
 
-All fourteen are free, open-source, and ship in the v0.1 binary. Run
-`faultkit scenario list` to see what's available on your installation.
+All of them are free, open-source, and built into the faultkit binary.
+Run `faultkit scenario list` to see what's available on your installation.
 
 ---
 
@@ -66,8 +68,8 @@ description: |                  # optional, shown in `scenario list`
   One-line description.
 
 requires:                      # optional, platform constraints
-  platform: linux              # one of: linux, darwin, any
-  kernel_min: "5.8"            # only relevant for eBPF scenarios
+  platform: linux              # advisory; declared but not validated or enforced
+  kernel_min: "5.8"            # advisory; declared but not validated or enforced
 
 experiments:                   # one or more fault recipes
   - name: "human-readable name"
@@ -82,9 +84,10 @@ experiments:                   # one or more fault recipes
 ```
 
 Multiple experiments in the same scenario are evaluated in order — the
-first match wins. Probability is independent per request: a `0.2`
-probability fires roughly 20% of matching requests, with the dice
-rolled fresh each time.
+first match wins. If the matching experiment's dice roll declines, the
+request passes through unfaulted; later experiments aren't tried.
+Probability is independent per request: a `0.2` probability fires
+roughly 20% of matching requests, with the dice rolled fresh each time.
 
 For the full schema reference, see [docs/yaml-schema.md](./yaml-schema.md).
 
@@ -140,15 +143,18 @@ it is.
 
 ### `llm-api-degraded`
 
-**The marquee scenario.** Your LLM provider returns rate limits,
-service errors, or timeouts under load. Your retry logic kicks in.
-Did it kick in correctly? Did the retry preserve reasoning state? Did
-it back off? Did it give up gracefully?
+**The marquee scenario.** Your LLM provider rate-limits you under
+load. Your retry logic kicks in. Did it kick in correctly? Did the
+retry preserve reasoning state? Did it back off? Did it give up
+gracefully?
 
-Real production failure mode: OpenAI rate limits during traffic
-spikes, Anthropic 503s during model rollouts, provider-side
-provisioning issues, network path degradation between your VPC and the
-provider.
+faultkit returns HTTP 429 to roughly 20% of requests: with
+`Retry-After: 30` for OpenAI and Anthropic, and as a
+`ThrottlingException` for Bedrock.
+
+Real production failure mode: OpenAI and Anthropic rate limits during
+traffic spikes, and Bedrock throttling when requests exceed your
+account's quotas.
 
 **What it tests:**
 
@@ -162,16 +168,10 @@ provider.
 
 ```yaml
 name: llm-api-degraded
-description: LLM provider returns 429/503/timeout under load.
+description: Rate-limit requests to OpenAI and Anthropic (HTTP 429, Retry-After 30) and Bedrock (HTTP 429 ThrottlingException).
 experiments:
-  - name: "openai rate-limited"
-    fault:
-      http_status: 429
-      response_headers:
-        Retry-After: "30"
-    match:
-      host: "api.openai.com"
-      path: "/v1/chat/completions"
+  - name: rate-limited
+    failure: rate-limited
     probability: 0.2
 ```
 
@@ -424,13 +424,14 @@ backoff rather than treating it as a permanent failure.
 ## eBPF scenarios
 
 These scenarios use faultkit's eBPF injector. Small kernel programs
-hook syscall tracepoints and rewrite return values for processes
+hook syscall kprobes and rewrite return values for processes
 inside your target's PID tree. The target sees a real `ECONNRESET`,
 a real `EACCES`, because that's what the kernel returned.
 
-eBPF scenarios require Linux 5.8 or newer with `CAP_BPF` and
-`CAP_NET_ADMIN` capabilities (or root). On other platforms,
-`faultkit check` will report these scenarios as unavailable.
+eBPF scenarios require Linux 5.8 or newer on x86-64, with `CAP_BPF`,
+`CAP_NET_ADMIN`, and `CAP_PERFMON` capabilities (or root). Where that's
+missing, `faultkit check` reports eBPF mode as unavailable and these
+scenarios fail with exit code `2`.
 
 ### `flaky-network`
 
@@ -550,7 +551,7 @@ Multiple experiments in one scenario:
 
 ```yaml
 name: production-bad-day
-description: Multiple failures happening simultaneously.
+description: Several LLM failures in the same run.
 experiments:
   - name: "openai rate-limited 10% of the time"
     fault:
@@ -565,29 +566,28 @@ experiments:
     match:
       host: "api.anthropic.com"
     probability: 0.05
-
-  - name: "tcp resets on backend recv"
-    fault:
-      errno: ECONNRESET
-    match:
-      syscall: recvmsg
-    probability: 0.02
 ```
 
 This is what production actually looks like — multiple low-probability
-failures interacting in ways no single scenario tests. faultkit
-applies them all simultaneously when you run with this config.
+failures interacting in ways no single scenario tests. Every HTTP
+experiment in the config is active for the whole run.
 
 ```bash
 faultkit run --config production-bad-day.yaml -- pytest tests/
 ```
 
+A run uses one injection mechanism, though. In a scenario that mixes
+HTTP and syscall experiments, auto-mode runs the HTTP experiments
+through the proxy and skips the syscall ones, and eBPF mode only ever
+runs a scenario's first syscall experiment. Keep syscall faults in a
+scenario of their own and run it separately.
+
 ---
 
 ## What's coming next
 
-The following scenarios are planned for v0.2. They aren't shipping in
-v0.1 but are tracked as open issues and welcome contribution:
+The following scenarios are planned. They don't ship yet, and
+contributions are welcome:
 
 Sequenced by the capability each needs (new LLM fixtures first, then a
 latency/hang primitive, then RAG providers, then the eBPF/shim subprocess
