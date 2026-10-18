@@ -213,7 +213,15 @@ func (i *Injector) Stop(_ context.Context) error {
 				i.stopErr = err
 			}
 		}
-		close(i.events)
+		// Seal only after the transports are down, so events from martian
+		// connections that were finishing are still delivered. The faulter
+		// owns the channel once it exists; Start may have failed before
+		// creating one.
+		if i.faulter != nil {
+			i.faulter.closeEvents()
+		} else {
+			close(i.events)
+		}
 	})
 	return i.stopErr
 }

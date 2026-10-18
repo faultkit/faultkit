@@ -30,7 +30,16 @@ const ctxKeyExperiment = "faultkit.experiment"
 // the upstream response (streaming-cutoff).
 type Faulter struct {
 	matcher *Matcher
-	events  chan<- inject.Event
+
+	// sendMu guards sends on events, the close of events, and sealed.
+	// Emits send only while unsealed and closeEvents seals and closes
+	// under the same lock, so an emit that outlives Injector.Stop (a
+	// stream-cutoff goroutine, a base-URL handler still running after
+	// http.Server.Close) is dropped instead of panicking on the closed
+	// channel.
+	sendMu sync.Mutex
+	sealed bool
+	events chan<- inject.Event
 
 	mu  sync.Mutex
 	rng *rand.Rand
@@ -181,7 +190,7 @@ func (f *Faulter) writeSyntheticResponse(w http.ResponseWriter, req *http.Reques
 }
 
 func (f *Faulter) emit(req *http.Request, exp *scenario.Experiment, host string) {
-	inject.TrySend(f.events, buildEvent(req, exp, host, ""))
+	f.send(buildEvent(req, exp, host, ""))
 }
 
 // emitErr publishes a non-fatal error encountered while applying a
@@ -192,7 +201,29 @@ func (f *Faulter) emitErr(req *http.Request, exp *scenario.Experiment, host stri
 	if err == nil {
 		return
 	}
-	inject.TrySend(f.events, buildEvent(req, exp, host, err.Error()))
+	f.send(buildEvent(req, exp, host, err.Error()))
+}
+
+// send publishes ev unless closeEvents has sealed the channel. TrySend never
+// blocks, so holding sendMu across it cannot deadlock.
+func (f *Faulter) send(ev inject.Event) {
+	f.sendMu.Lock()
+	defer f.sendMu.Unlock()
+	if !f.sealed {
+		inject.TrySend(f.events, ev)
+	}
+}
+
+// closeEvents seals the faulter and closes its event channel exactly once;
+// later emits are dropped. It must be the channel's only closer.
+func (f *Faulter) closeEvents() {
+	f.sendMu.Lock()
+	defer f.sendMu.Unlock()
+	if f.sealed {
+		return
+	}
+	f.sealed = true
+	close(f.events)
 }
 
 func buildEvent(req *http.Request, exp *scenario.Experiment, host, errMsg string) inject.Event {
