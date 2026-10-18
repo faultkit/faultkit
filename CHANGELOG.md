@@ -24,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   requires Go 1.26, so `go.mod` now declares `go 1.26.0`.
 - The integration-test image (`test/docker/Dockerfile`) is now pinned by
   digest as well as by tag.
+- `make lint` no longer suggests installing golangci-lint with `@latest`
+  when it is missing. The hint now uses the version CI pins (v1.64.8).
 
 ### Docs
 

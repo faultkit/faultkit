@@ -38,7 +38,7 @@ lint:
 		golangci-lint run; \
 	else \
 		echo "golangci-lint not installed; install with:"; \
-		echo "  go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest"; \
+		echo "  go install github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)"; \
 		exit 1; \
 	fi
 
@@ -48,6 +48,7 @@ lint:
 GOSEC_VERSION       := v2.26.1
 NILAWAY_VERSION     := v0.0.0-20260318203545-ad240b12fb4c
 GOVULNCHECK_VERSION := v1.3.0
+GOLANGCI_LINT_VERSION := v1.64.8
 
 sec:
 	@if ! command -v gosec >/dev/null 2>&1; then \
