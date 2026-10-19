@@ -75,6 +75,8 @@ Run `faultkit scenario list` to see what's available on your installation.
 |---|---|---|
 | `memory-write-failure` | proxy (forward-proxy only) | A store write is acknowledged but never stored; the next read is stale |
 | `mcp-tool-schema-mismatch` | proxy (forward-proxy only) | An MCP tool result's `structuredContent` no longer matches the tool's `outputSchema` |
+| `gateway-timeout` | proxy (forward-proxy only) | Your LLM gateway answers 30 s late, or hangs 60 s and then answers 504 |
+| `subagent-timeout` | proxy (forward-proxy only) | An HTTP call to a sub-agent never returns within the run |
 
 ---
 
@@ -820,10 +822,10 @@ loop terminates without explanation. The user sees a generic
 ## Recipes
 
 Some failures only make sense against a host faultkit can't know in
-advance, such as your own memory store or MCP server. These ship as
-recipes: copy the YAML into a file, point it at your host, and run it
-with `--config`. They aren't builtins, so `faultkit run --scenario` and
-`faultkit scenario list` don't know them.
+advance, such as your own memory store, MCP server, gateway or sub-agent.
+These ship as recipes: copy the YAML into a file, point it at your host,
+and run it with `--config`. They aren't builtins, so
+`faultkit run --scenario` and `faultkit scenario list` don't know them.
 
 ### `memory-write-failure`
 
@@ -1088,6 +1090,284 @@ with a client that doesn't validate, the agent compares the string
 `"22.5"` to a number, adds to it, or stores it where a number belongs,
 and nothing in the logs says the tool's output was wrong.
 
+### `gateway-timeout`
+
+Your application reaches its LLM through a gateway (LiteLLM, Portkey,
+your own proxy) rather than calling the provider directly. The gateway
+answers slowly, or holds the request until something gives up and then
+answers `504 Gateway Timeout`. Does your application wait within a
+deliberate timeout, retry once, fall back, or hang?
+
+In production this happens when the provider behind the gateway is
+slow, the gateway itself is overloaded and queueing, or a reverse proxy
+in front of it gives up first: nginx, for one, waits 60 s for a response
+by default (`proxy_read_timeout`) and then answers 504.
+
+The recipe comes in two variants. Use one at a time: faultkit applies
+the first experiment that matches a request, so a second experiment on
+the same host and path would never fire.
+
+- **Slow:** each matched request is held for 30 s, then forwarded
+  unchanged to your gateway, so the reply starts 30 s late.
+- **Hang, then 504:** each matched request is held for 60 s, then
+  answered with a synthetic `504`. Your gateway never sees the request.
+
+**Limits:**
+
+- **Forward-proxy mode only.** `--base-url` only routes OpenAI and
+  Anthropic traffic, so it can't reach a gateway host: with this recipe
+  the run fails at start (exit `2`). Your app's gateway client must honor
+  `HTTPS_PROXY` (`HTTP_PROXY` for an `http://` gateway) and trust the CA
+  bundle faultkit injects (`SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE`,
+  `NODE_EXTRA_CA_CERTS`, …).
+- **A gateway on `localhost` is reached only by some clients.** faultkit
+  doesn't set `NO_PROXY` in forward-proxy mode, so the target inherits
+  yours, and a client that reads it skips the hosts it lists. Unless
+  `NO_PROXY` lists the gateway's host, curl and Python's `urllib` send
+  loopback requests through the proxy, and `host: "localhost"` (or
+  `"127.0.0.1"`, whichever your app's URL uses) works. Go's `net/http`
+  never proxies a loopback address, so its requests never reach faultkit.
+  If your client bypasses the proxy, see
+  [Faulting a local gateway's upstream](#faulting-a-local-gateways-upstream).
+- **The 504 body is a generic JSON error** unless you set one:
+  `{"error":{"message":"Gateway Timeout","type":"api_error"}}`, with
+  `Content-Type: application/json`. If your client parses error bodies,
+  set `response_body` (and `response_headers`) to what your gateway, or
+  the proxy in front of it, really returns.
+- **The slow variant still forwards a request your client gave up on.**
+  faultkit doesn't notice a client that times out during the hold. If
+  the run is still going when the 30 s run out, the request reaches your
+  gateway: a real, possibly billed, call, and a duplicate if your client
+  retried. The hang-then-504 variant never forwards anything.
+
+**What it tests:**
+
+- Client timeouts on gateway calls: is there one, and does it fire
+  before your own request handler's?
+- Retries on a timeout or a 504: how many, with what backoff, and
+  whether a retry duplicates work
+- Fallback to another route or model when the gateway doesn't answer
+- What the user sees while waiting and after the app gives up
+
+**YAML, slow** (save as `gateway-timeout-slow.yaml`):
+
+```yaml
+name: gateway-timeout-slow
+description: Requests to the LLM gateway are held 30 s, then forwarded unchanged.
+experiments:
+  - name: "gateway slow"
+    fault:
+      delay_ms: 30000
+    match:
+      host: "gateway.example.com"   # replace with your gateway's host
+      path: "/v1/chat/completions"  # replace with the path your app calls
+    probability: 1.0
+```
+
+**YAML, hang then 504** (save as `gateway-timeout-504.yaml`):
+
+```yaml
+name: gateway-timeout-504
+description: Requests to the LLM gateway hang for 60 s, then get a 504.
+experiments:
+  - name: "gateway hangs, then 504"
+    fault:
+      delay_ms: 60000
+      http_status: 504
+    match:
+      host: "gateway.example.com"   # replace with your gateway's host
+      path: "/v1/chat/completions"  # replace with the path your app calls
+    probability: 1.0
+```
+
+Replace the host and path with your gateway's; `host` is required, a
+match without it never fires. Pick `delay_ms` against your client's
+timeout: longer than it tests the timeout path, shorter tests a slow
+call that still succeeds. The limit is `300000` (5 minutes).
+`probability: 1.0` holds every matched request, retries included, so the
+run is repeatable.
+
+**Run it:**
+
+```bash
+faultkit run --config gateway-timeout-504.yaml -- pytest tests/
+```
+
+Each held request is a fired event, counted when its hold starts. A
+fired delay proves only that: the request reached faultkit and was held.
+It counts even if your client gave up a moment later or the run ended
+first (see [the delay fields](./yaml-schema.md#delay-level-neutral)), so
+it doesn't prove your app handled anything. With exit `0` the report
+says `invariant_proven_under_fault`, so the test itself has to check the
+handling: that the call ended within your timeout, and that the user got
+the fallback or an honest error. If no request matches (wrong host or
+path) or none reaches faultkit (a client that bypasses the proxy), the
+verdict is `invalid_evidence` and faultkit exits `3` unless the target
+itself failed.
+
+When the target exits, faultkit cuts every hold short and drops those
+connections without forwarding them, so the run ends with the target,
+not when the delay would have run out.
+
+#### Faulting a local gateway's upstream
+
+When the gateway runs on your machine (a self-hosted LiteLLM on
+`localhost:4000`, say) and your app's client doesn't send loopback
+traffic through the proxy, fault the gateway's own calls to the provider
+instead. Start the gateway as a child of the target, so it inherits
+faultkit's `HTTPS_PROXY` and CA variables, and set `host` and `path` in
+one of the files above to your provider's (`api.openai.com` and
+`/v1/chat/completions`, for example):
+
+```bash
+faultkit run --config gateway-timeout-504.yaml -- sh -c '
+  your-gateway --port 4000 & gw=$!
+  trap "kill $gw" EXIT
+  sleep 5   # better: poll the gateway until it answers
+  pytest tests/'
+```
+
+Now the gateway's upstream call is held, and whatever reaches your app
+comes from the gateway: its own timeout error, the 504 passed on, or a
+fallback. That tests the gateway's configuration together with your
+app.
+
+This works only if the gateway's HTTP client honors `HTTPS_PROXY` and
+the CA bundle variables. faultkit hasn't been tried with specific
+gateway products; if yours ignores them, nothing fires and the run exits
+`3`. A gateway in a container or on another host isn't a child of the
+target, so it can't be covered this way. Stop the gateway when the
+target finishes, as the `trap` does: faultkit doesn't stop processes the
+target leaves behind.
+
+**What good behavior looks like:**
+
+Your app gives up on the gateway at a timeout someone chose, shorter
+than the timeout of whatever calls your app, retries at most once with
+backoff, then falls back to another route or tells the user plainly
+that the answer isn't coming.
+
+**What bad behavior looks like:**
+
+The app waits out its SDK's default timeout (often minutes), a request
+handler times out first and the user gets a generic error, or the app
+retries in a loop and piles more load on a gateway that is already slow.
+A 504 body the client can't parse becomes a crash instead of a retry.
+
+### `subagent-timeout`
+
+An orchestrator agent hands work to a sub-agent over HTTP (an A2A agent,
+an MCP server over streamable HTTP, or your own agent service), and the
+call never comes back. Does the orchestrator give up at its own deadline
+and carry on, or does the whole task hang with it?
+
+In production this happens when a sub-agent is stuck in a long tool
+loop, waiting on a slow dependency of its own, or deadlocked, or when a
+response is lost without the connection closing.
+
+The recipe holds each matched call for 5 minutes, the longest delay
+faultkit allows, so the call doesn't return within the run. When the
+orchestrator gives up and the target exits, faultkit cuts the hold short
+and drops the connection. The sub-agent never receives the call.
+
+**Limits:**
+
+- **HTTP sub-agents only.** An MCP server over stdio, or a sub-agent
+  your orchestrator runs as a subprocess, doesn't go through the proxy,
+  so it isn't covered.
+- **Forward-proxy mode only**, with the same conditions as
+  [`gateway-timeout`](#gateway-timeout): the orchestrator's HTTP client
+  must honor `HTTPS_PROXY` and trust faultkit's CA bundle, and a
+  sub-agent on `localhost` is reached only by clients that send loopback
+  traffic through the proxy. `--base-url` can't reach a sub-agent host:
+  the run fails at start (exit `2`).
+- **Calls are matched by method, host and path, not by body**, so
+  faultkit can't tell one JSON-RPC method from another. An A2A client
+  fetches the agent card with a `GET`, which `method: POST` lets
+  through, so the first call held is the message itself. An MCP client
+  over streamable HTTP sends every request as a `POST` to one endpoint,
+  so the first call held is `initialize`: the session never starts, and
+  you test the orchestrator's connect timeout rather than a tool-call
+  timeout.
+- **Every retry hangs too.** At `probability: 1.0` the orchestrator
+  waits out its full timeout once per attempt.
+
+**What it tests:**
+
+- An orchestration ceiling: a deadline on each sub-agent call and on the
+  task as a whole
+- Cancellation: the orchestrator stops waiting instead of leaving the
+  task stuck
+- Degradation: finishing without the sub-agent's result, and saying so,
+  or failing with a clear error
+- Retries: a bounded number of attempts at a call that hangs
+
+**YAML** (save as `subagent-timeout.yaml`):
+
+```yaml
+name: subagent-timeout
+description: Calls to a sub-agent's HTTP endpoint never return within the run.
+experiments:
+  - name: "sub-agent call hangs"
+    fault:
+      delay_ms: 300000              # the maximum: 5 minutes
+      # Keeps a held call from being forwarded to the sub-agent if the run
+      # outlasts the delay (see below).
+      http_status: 504
+    match:
+      host: "subagent.example.com"  # replace with the sub-agent's host
+      path: "/a2a"                  # replace with its endpoint path, e.g. /mcp
+      method: POST
+    probability: 1.0
+```
+
+Replace the host and path with your sub-agent's endpoint; `host` is
+required, a match without it never fires. Delete `method: POST` to hold
+every request to the path, `GET`s included.
+
+The `http_status: 504` only matters if the run outlasts the delay, for
+example when the orchestrator has no deadline at all. By the time the 5
+minutes run out, the proxy's own 5-minute limit for the request has
+passed too, so the orchestrator sees the connection close instead of a
+504, and the call still never reaches the sub-agent. Without a status,
+the call would be forwarded to the sub-agent when the delay runs out,
+even though no reply can reach the orchestrator any more.
+
+**Run it:**
+
+```bash
+faultkit run --config subagent-timeout.yaml -- pytest tests/orchestrator/
+```
+
+Each held call is a fired event, counted when its hold starts. A fired
+delay proves only that the call reached faultkit and was held. It counts
+even if the orchestrator gave up a moment later (see
+[the delay fields](./yaml-schema.md#delay-level-neutral)), so it doesn't
+prove the orchestrator coped. With exit `0` the report says
+`invariant_proven_under_fault`, so the test has to assert the ceiling
+itself: that the task ended within your deadline, well under 5 minutes,
+with the outcome you expect (a degraded answer or a clear error). If no
+call matches or reaches faultkit, the verdict is `invalid_evidence` and
+faultkit exits `3` unless the target itself failed.
+
+Give the test runner a timeout above your ceiling too. An orchestrator
+with no ceiling waits out the whole hold: its call fails only after 5
+minutes, when the connection closes, and each retry waits another 5.
+
+**What good behavior looks like:**
+
+The orchestrator stops waiting on the sub-agent at a deadline someone
+chose, well under 5 minutes. It cancels the call, then either finishes
+the task without that result and says so, or fails with an error that
+names the sub-agent.
+
+**What bad behavior looks like:**
+
+The orchestrator waits with no deadline, or with a library default of
+many minutes, so the user waits too. It retries the hanging call again
+and again, or it times out but still reports the task as complete with a
+piece silently missing.
+
 ---
 
 ## Composing scenarios
@@ -1134,13 +1414,11 @@ scenario of their own and run it separately.
 The following scenarios are planned. They don't ship yet, and
 contributions are welcome:
 
-Sequenced by the capability each needs (new LLM fixtures first, then a
-latency/hang primitive, then the eBPF/shim subprocess track):
+All of them need syscall-level injection, through eBPF or the planned
+LD_PRELOAD shim:
 
 | Scenario | Mechanism | What it will test |
 |---|---|---|
-| `gateway-timeout` | proxy | LiteLLM / Portkey / gateway returns slow or hangs |
-| `subagent-timeout` | proxy | A subagent tool call never returns |
 | `tool-call-flaky` | eBPF / shim | Truncated stdout, exit 0 — partial data, no error raised |
 | `partial-tool-result` | eBPF / shim | Valid-but-incomplete tool result, exit 0 |
 | `tool-slow` | eBPF / shim | Subprocess hangs for N seconds |

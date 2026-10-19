@@ -149,6 +149,7 @@ These are **failure modes** — provider-agnostic recipes. By default each fires
 against every provider that has a fixture for it: OpenAI, Anthropic, and
 Bedrock, except `llm-streaming-cutoff`, whose `streaming-cutoff` mode has no
 Bedrock fixture (OpenAI and Anthropic only). Narrow to one with `--provider`.
+The `gateway-timeout` recipe is the exception: it targets your gateway's host.
 
 | Scenario | What it does | Status |
 |---|---|:---:|
@@ -160,7 +161,7 @@ Bedrock fixture (OpenAI and Anthropic only). Narrow to one with `--provider`.
 | `llm-empty-response` | 200 OK, valid JSON, but no content: `content: null` + `finish_reason: content_filter` (OpenAI), or an empty `content` array with `end_turn` (Anthropic, Bedrock). Applies to non-streaming calls | ✅ |
 | `llm-slow-first-token` | Hold each request 8–15s, then forward it unchanged: the response (streamed or not) starts late | ✅ |
 | `context-window-overflow` | The provider rejects the request as over the model's context window: HTTP 400 (OpenAI `context_length_exceeded`, Anthropic `prompt is too long`, Bedrock `ValidationException`). Not silent truncation | ✅ |
-| `gateway-timeout` | LiteLLM / Portkey / custom gateway returns slow or hangs | 🛣️ |
+| `gateway-timeout` | Your LLM gateway answers 30 s late, or hangs 60 s and then returns 504. Forward-proxy mode only, via [copy-paste recipes](docs/scenarios.md#gateway-timeout); a gateway on `localhost` is reached only if your client sends loopback traffic through the proxy | ✅ |
 
 ### Anthropic-specific
 
@@ -207,7 +208,7 @@ intact but base-URL mode would break, so `--base-url` doesn't target it.
 | Scenario | What it does | Status |
 |---|---|:---:|
 | `mcp-tool-schema-mismatch` | An MCP server's `tools/call` result no longer matches the tool's declared `outputSchema`: each top-level `structuredContent` value changes type. Streamable-HTTP MCP servers in forward-proxy mode only (not stdio, not `--base-url`), and `structuredContent` only, not the text in `content[]`, via a [copy-paste recipe](docs/scenarios.md#mcp-tool-schema-mismatch) | ✅ |
-| `subagent-timeout` | A subagent tool call never returns — tests the orchestration ceiling | 🛣️ |
+| `subagent-timeout` | An HTTP call to a sub-agent (A2A, MCP over streamable HTTP, …) never returns within the run — tests the orchestration ceiling. HTTP sub-agents and forward-proxy mode only (not stdio MCP servers or subprocesses), via a [copy-paste recipe](docs/scenarios.md#subagent-timeout) | ✅ |
 | `memory-write-failure` | An HTTP memory store acknowledges a write it never stores; the next read is stale. HTTP-backed stores and forward-proxy mode only, via a [copy-paste recipe](docs/scenarios.md#memory-write-failure) | ✅ |
 
 ### Backend classics
