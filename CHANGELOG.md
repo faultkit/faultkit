@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Build / supply chain
+
+- **Go 1.26.9 and `golang.org/x/net` v0.60.0** fix nine vulnerabilities
+  that govulncheck found reachable from faultkit's code, in `net/http`,
+  `net/textproto`, `crypto/tls`, and x/net's HTTP/2 code: GO-2026-6603,
+  GO-2026-6605, GO-2026-6607, GO-2026-6608, GO-2026-6610, GO-2026-6611,
+  GO-2026-6612, GO-2026-6613, and GO-2026-6617. Go 1.25 no longer gets
+  security fixes, so CI and the integration-test image move to Go 1.26.9.
+  x/net v0.60.0 also raises `golang.org/x/sys` to v0.48.0 and
+  `golang.org/x/text` to v0.42.0. The bump also clears advisories
+  govulncheck listed as not reachable: GO-2026-5942 (x/net),
+  GO-2026-5970 and GO-2026-6629 (x/text), and GO-2026-6599,
+  GO-2026-6600, GO-2026-6604, and GO-2026-6609 (standard library).
+- **Building from source needs Go 1.26 or newer.** x/net v0.60.0
+  requires Go 1.26, so `go.mod` now declares `go 1.26.0`.
+- The integration-test image (`test/docker/Dockerfile`) is now pinned by
+  digest as well as by tag.
+
 ### Docs
 
 - The README names the faultkit skill's renamed commands: `/faultkit:prove`

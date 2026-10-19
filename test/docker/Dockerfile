@@ -4,7 +4,7 @@
 # toolchain matrix the example targets exercise: Go for faultkit
 # itself, python3+pytest+openai for the proxy integration test, and
 # Node 20 for the JS examples.
-FROM golang:1.25.11-bookworm
+FROM golang:1.26.9-bookworm@sha256:d9c68c2c51161e12fd77e4c6320687c9cd86e1af1e3ad6e6cd63ff970641453c
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         python3 python3-pip python3-venv \
