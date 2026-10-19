@@ -369,8 +369,10 @@ or a gateway in between is slow.
 
 faultkit holds each matched request for 8 s plus a random 0–7 s, then
 forwards it unchanged to the real provider. The reply itself is the
-provider's own, so a streamed response streams normally once it starts,
-and a non-streamed one arrives whole; only its start is late. The fault
+provider's own; only its start is late. In base-URL mode a streamed
+response then streams as the provider sends it. In forward-proxy mode
+the proxy buffers the client side in 4 KiB writes, so a short stream can
+arrive in one piece at the end. A non-streamed reply arrives whole. The fault
 applies to OpenAI `/v1/chat/completions`, Anthropic `/v1/messages`, and
 Bedrock `/model/*` (forward-proxy mode only, like every Bedrock fixture).
 Each delayed request counts as one fired fault, when its delay starts,
