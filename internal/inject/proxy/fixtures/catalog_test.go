@@ -211,6 +211,239 @@ func TestCatalogAnthropicExtras(t *testing.T) {
 	})
 }
 
+// emptyResponseFixture returns the (empty-response, provider) fixture after
+// checking the parts every provider shares: a 200 on the chat path.
+func emptyResponseFixture(t *testing.T, provider, wantPath string) fixtures.Fixture {
+	t.Helper()
+	f, ok := fixtures.For("empty-response", provider)
+	if !ok {
+		t.Fatalf("expected (empty-response, %s)", provider)
+	}
+	if f.Status != 200 {
+		t.Errorf("Status = %d, want 200", f.Status)
+	}
+	if f.Path != wantPath {
+		t.Errorf("Path = %q, want %q", f.Path, wantPath)
+	}
+	return f
+}
+
+func TestCatalogEmptyResponse(t *testing.T) {
+	t.Run("openai: content null, finish_reason content_filter", func(t *testing.T) {
+		f := emptyResponseFixture(t, "openai", "/v1/chat/completions")
+		var env struct {
+			Choices []struct {
+				Message      map[string]json.RawMessage `json:"message"`
+				FinishReason string                     `json:"finish_reason"`
+			} `json:"choices"`
+		}
+		if err := json.Unmarshal([]byte(f.Body), &env); err != nil {
+			t.Fatalf("envelope must be valid JSON: %v\nbody=%s", err, f.Body)
+		}
+		if len(env.Choices) != 1 {
+			t.Fatalf("got %d choices, want 1", len(env.Choices))
+		}
+		if got := string(env.Choices[0].Message["content"]); got != "null" {
+			t.Errorf("message.content = %s, want null", got)
+		}
+		if env.Choices[0].FinishReason != "content_filter" {
+			t.Errorf("finish_reason = %q, want content_filter", env.Choices[0].FinishReason)
+		}
+	})
+
+	t.Run("anthropic: empty content, stop_reason end_turn", func(t *testing.T) {
+		f := emptyResponseFixture(t, "anthropic", "/v1/messages")
+		var env struct {
+			Content    json.RawMessage `json:"content"`
+			StopReason string          `json:"stop_reason"`
+		}
+		if err := json.Unmarshal([]byte(f.Body), &env); err != nil {
+			t.Fatalf("envelope must be valid JSON: %v\nbody=%s", err, f.Body)
+		}
+		if string(env.Content) != "[]" {
+			t.Errorf("content = %s, want []", env.Content)
+		}
+		if env.StopReason != "end_turn" {
+			t.Errorf("stop_reason = %q, want end_turn", env.StopReason)
+		}
+	})
+
+	t.Run("bedrock: empty Converse content, stopReason end_turn", func(t *testing.T) {
+		f := emptyResponseFixture(t, "bedrock", "/model/*/converse")
+		var env struct {
+			Output struct {
+				Message struct {
+					Role    string          `json:"role"`
+					Content json.RawMessage `json:"content"`
+				} `json:"message"`
+			} `json:"output"`
+			StopReason string `json:"stopReason"`
+		}
+		if err := json.Unmarshal([]byte(f.Body), &env); err != nil {
+			t.Fatalf("envelope must be valid JSON: %v\nbody=%s", err, f.Body)
+		}
+		if env.Output.Message.Role != "assistant" {
+			t.Errorf("output.message.role = %q, want assistant", env.Output.Message.Role)
+		}
+		if string(env.Output.Message.Content) != "[]" {
+			t.Errorf("output.message.content = %s, want []", env.Output.Message.Content)
+		}
+		if env.StopReason != "end_turn" {
+			t.Errorf("stopReason = %q, want end_turn", env.StopReason)
+		}
+	})
+}
+
+func TestCatalogEmbeddingsUnavailable(t *testing.T) {
+	if _, ok := fixtures.For("embeddings-unavailable", "anthropic"); ok {
+		t.Error("embeddings-unavailable should have no anthropic fixture (Anthropic has no embeddings API)")
+	}
+
+	cases := []struct {
+		provider, host, path string
+		wantHeaders          map[string]string
+		errorField           string // top-level key of the synthesized error body
+	}{
+		{"openai", "api.openai.com", "/v1/embeddings", nil, "error"},
+		{"bedrock", "bedrock-runtime.us-east-1.amazonaws.com", "/model/*embed*/invoke", map[string]string{"x-amzn-errortype": "ServiceUnavailableException"}, "message"},
+	}
+	for _, c := range cases {
+		t.Run(c.provider, func(t *testing.T) {
+			f, ok := fixtures.For("embeddings-unavailable", c.provider)
+			if !ok {
+				t.Fatalf("expected (embeddings-unavailable, %s)", c.provider)
+			}
+			if f.Status != 503 {
+				t.Errorf("Status = %d, want 503", f.Status)
+			}
+			if f.Path != c.path {
+				t.Errorf("Path = %q, want %q", f.Path, c.path)
+			}
+			if f.Body != "" {
+				t.Errorf("body should be empty (synthesized per vendor), got %q", f.Body)
+			}
+			syn := fixtures.Build(c.host, faulttypes.Fault{HTTPStatus: f.Status, ResponseHeaders: f.Headers})
+			for k, v := range c.wantHeaders {
+				if syn.Headers[k] != v {
+					t.Errorf("header %s = %q, want %q", k, syn.Headers[k], v)
+				}
+			}
+			var body map[string]json.RawMessage
+			if err := json.Unmarshal(syn.Body, &body); err != nil {
+				t.Fatalf("synthesized body must be valid JSON: %v\nbody=%s", err, syn.Body)
+			}
+			if _, ok := body[c.errorField]; !ok {
+				t.Errorf("synthesized body = %s, want a top-level %q field", syn.Body, c.errorField)
+			}
+		})
+	}
+}
+
+func TestCatalogContextLengthExceeded(t *testing.T) {
+	cases := []struct {
+		provider, host, path string
+		wantHeaders          map[string]string
+		checkBody            func(t *testing.T, body []byte)
+	}{
+		{"openai", "api.openai.com", "/v1/chat/completions", nil, func(t *testing.T, body []byte) {
+			var env struct {
+				Error struct {
+					Message string  `json:"message"`
+					Type    string  `json:"type"`
+					Param   *string `json:"param"`
+					Code    string  `json:"code"`
+				} `json:"error"`
+			}
+			if err := json.Unmarshal(body, &env); err != nil {
+				t.Fatalf("body must be valid JSON: %v\nbody=%s", err, body)
+			}
+			if env.Error.Type != "invalid_request_error" {
+				t.Errorf("error.type = %q, want invalid_request_error", env.Error.Type)
+			}
+			if env.Error.Code != "context_length_exceeded" {
+				t.Errorf("error.code = %q, want context_length_exceeded", env.Error.Code)
+			}
+			if env.Error.Param == nil || *env.Error.Param != "messages" {
+				t.Errorf("error.param = %v, want \"messages\"", env.Error.Param)
+			}
+			if env.Error.Message == "" {
+				t.Error("error.message is empty")
+			}
+		}},
+		{"anthropic", "api.anthropic.com", "/v1/messages", nil, func(t *testing.T, body []byte) {
+			var env struct {
+				Type  string `json:"type"`
+				Error struct {
+					Type    string `json:"type"`
+					Message string `json:"message"`
+				} `json:"error"`
+			}
+			if err := json.Unmarshal(body, &env); err != nil {
+				t.Fatalf("body must be valid JSON: %v\nbody=%s", err, body)
+			}
+			if env.Type != "error" {
+				t.Errorf("type = %q, want error", env.Type)
+			}
+			if env.Error.Type != "invalid_request_error" {
+				t.Errorf("error.type = %q, want invalid_request_error", env.Error.Type)
+			}
+			if !strings.HasPrefix(env.Error.Message, "prompt is too long") {
+				t.Errorf("error.message = %q, want a \"prompt is too long\" message", env.Error.Message)
+			}
+		}},
+		{"bedrock", "bedrock-runtime.us-east-1.amazonaws.com", "/model/*/converse", map[string]string{"x-amzn-errortype": "ValidationException"}, func(t *testing.T, body []byte) {
+			var env map[string]json.RawMessage
+			if err := json.Unmarshal(body, &env); err != nil {
+				t.Fatalf("body must be valid JSON: %v\nbody=%s", err, body)
+			}
+			if _, ok := env["message"]; !ok {
+				t.Errorf("body = %s, want a flat {\"message\":...} AWS JSON error", body)
+			}
+			if _, ok := env["error"]; ok {
+				t.Errorf("body = %s, want no {\"error\":{...}} wrapper", body)
+			}
+		}},
+	}
+	for _, c := range cases {
+		t.Run(c.provider, func(t *testing.T) {
+			f, ok := fixtures.For("context-length-exceeded", c.provider)
+			if !ok {
+				t.Fatalf("expected (context-length-exceeded, %s)", c.provider)
+			}
+			if f.Status != 400 {
+				t.Errorf("Status = %d, want 400", f.Status)
+			}
+			if f.Path != c.path {
+				t.Errorf("Path = %q, want %q", f.Path, c.path)
+			}
+			// The served response: explicit catalog body verbatim, plus headers.
+			syn := fixtures.Build(c.host, faulttypes.Fault{HTTPStatus: f.Status, ResponseHeaders: f.Headers, ResponseBody: f.Body})
+			if syn.Status != 400 {
+				t.Errorf("served status = %d, want 400", syn.Status)
+			}
+			for k, v := range c.wantHeaders {
+				if syn.Headers[k] != v {
+					t.Errorf("header %s = %q, want %q", k, syn.Headers[k], v)
+				}
+			}
+			c.checkBody(t, syn.Body)
+		})
+	}
+}
+
+// The context-length bodies live in the catalog, not in the per-vendor 400
+// tables, so a raw `http_status: 400` fault keeps returning its generic body.
+func TestRaw400BodyIsNotContextLength(t *testing.T) {
+	for _, host := range []string{"api.openai.com", "api.anthropic.com", "bedrock-runtime.us-east-1.amazonaws.com"} {
+		body := string(fixtures.Build(host, faulttypes.Fault{HTTPStatus: 400}).Body)
+		for _, marker := range []string{"context_length_exceeded", "prompt is too long", "Input is too long"} {
+			if strings.Contains(body, marker) {
+				t.Errorf("%s: raw 400 body = %s, must not contain %q", host, body, marker)
+			}
+		}
+	}
+}
+
 func TestCatalogKnownMode(t *testing.T) {
 	if !fixtures.KnownMode("malformed-json") {
 		t.Error("malformed-json should be a known mode")

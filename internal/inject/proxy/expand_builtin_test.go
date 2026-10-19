@@ -113,6 +113,9 @@ func TestExpandNewBuiltins(t *testing.T) {
 		{"anthropic-request-too-large", []string{"api.anthropic.com"}},
 		{"max-tokens-truncation", []string{"api.openai.com", "api.anthropic.com", "bedrock-runtime.*.amazonaws.com"}},
 		{"malformed-tool-use", []string{"api.openai.com", "api.anthropic.com", "bedrock-runtime.*.amazonaws.com"}},
+		{"llm-empty-response", []string{"api.openai.com", "api.anthropic.com", "bedrock-runtime.*.amazonaws.com"}},
+		{"embeddings-degraded", []string{"api.openai.com", "bedrock-runtime.*.amazonaws.com"}},
+		{"context-window-overflow", []string{"api.openai.com", "api.anthropic.com", "bedrock-runtime.*.amazonaws.com"}},
 	}
 	for _, c := range cases {
 		t.Run(c.builtin, func(t *testing.T) {
@@ -137,5 +140,42 @@ func TestExpandNewBuiltins(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// embeddings-degraded must fault only embeddings traffic: the expanded
+// experiments fire on the OpenAI embeddings path and on Bedrock InvokeModel for
+// an embedding model, never on chat/Converse calls on the same hosts.
+func TestEmbeddingsDegradedMatchesOnlyEmbeddingCalls(t *testing.T) {
+	s, err := scenario.LoadBuiltin("embeddings-degraded")
+	if err != nil {
+		t.Fatal(err)
+	}
+	expanded, err := expandScenario(s, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := NewMatcher(expanded)
+	cases := []struct {
+		host, path string
+		want       bool
+	}{
+		{"api.openai.com", "/v1/embeddings", true},
+		{"api.openai.com", "/v1/chat/completions", false},
+		{"bedrock-runtime.us-east-1.amazonaws.com", "/model/amazon.titan-embed-text-v2:0/invoke", true},
+		{"bedrock-runtime.eu-west-1.amazonaws.com", "/model/cohere.embed-english-v3/invoke", true},
+		{"bedrock-runtime.us-east-1.amazonaws.com", "/model/amazon.titan-embed-text-v2:0/converse", false},
+		{"bedrock-runtime.us-east-1.amazonaws.com", "/model/anthropic.claude-3-haiku/converse", false},
+		{"bedrock-runtime.us-east-1.amazonaws.com", "/model/anthropic.claude-3-haiku/invoke", false},
+	}
+	for _, c := range cases {
+		exp := m.matchHostPath(c.host, c.path)
+		if (exp != nil) != c.want {
+			t.Errorf("%s%s: matched=%v, want %v", c.host, c.path, exp != nil, c.want)
+			continue
+		}
+		if exp != nil && exp.Fault.HTTPStatus != 503 {
+			t.Errorf("%s%s: status=%d, want 503", c.host, c.path, exp.Fault.HTTPStatus)
+		}
 	}
 }

@@ -37,3 +37,11 @@ const (
 	// malformed-tool-use: toolUse.input violates the tool schema (id typed as string).
 	bedrockConverseMalformedToolUse = `{"output":{"message":{"role":"assistant","content":[{"toolUse":{"toolUseId":"tool_1","name":"lookup_user","input":{"id":"not-an-integer"}}}]}},"stopReason":"tool_use","usage":{"inputTokens":10,"outputTokens":8}}`
 )
+
+// bedrockConverseEmptyResponse (empty-response): no content blocks, with an
+// ordinary end_turn stop reason (as in the Anthropic cell).
+const bedrockConverseEmptyResponse = `{"output":{"message":{"role":"assistant","content":[]}},"stopReason":"end_turn","usage":{"inputTokens":10,"outputTokens":0}}`
+
+// bedrockContextLengthExceeded (context-length-exceeded): the flat AWS JSON
+// error body; the catalog cell sets x-amzn-errortype: ValidationException.
+const bedrockContextLengthExceeded = `{"message":"Input is too long for requested model."}`

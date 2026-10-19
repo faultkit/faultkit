@@ -1,0 +1,6 @@
+name: context-window-overflow
+description: LLM provider rejects the request as over the model's context window with HTTP 400 (OpenAI context_length_exceeded; Anthropic invalid_request_error "prompt is too long"; Bedrock ValidationException).
+experiments:
+  - name: context-length-exceeded
+    failure: context-length-exceeded
+    probability: 0.2

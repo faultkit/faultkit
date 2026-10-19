@@ -28,6 +28,8 @@ Narrow with `--provider` (see [Failure modes and providers](#failure-modes-and-p
 | `malformed-tool-use` | proxy | Tool call with malformed / schema-violating arguments |
 | `max-tokens-truncation` | proxy | Truncated 200 the agent treats as complete |
 | `llm-streaming-cutoff` | proxy | Streaming response drops mid-token |
+| `llm-empty-response` | proxy | 200 with no content (`null` / empty content array) |
+| `context-window-overflow` | proxy | Provider rejects the prompt as over the context window (HTTP 400) |
 
 **Anthropic-specific** — failures Claude surfaces with no OpenAI equivalent:
 
@@ -45,6 +47,13 @@ Narrow with `--provider` (see [Failure modes and providers](#failure-modes-and-p
 |---|---|---|
 | `bedrock-model-timeout` | proxy | HTTP 408 `ModelTimeoutException` |
 | `bedrock-service-unavailable` | proxy | HTTP 503 `ServiceUnavailableException` |
+
+**RAG and vector DB** — embeddings endpoints on OpenAI and Bedrock (Anthropic
+has no embeddings API):
+
+| Scenario | Mode | What it tests |
+|---|---|---|
+| `embeddings-degraded` | proxy | Embeddings endpoint returns 503 |
 
 **Syscall-level** — Linux, eBPF:
 
@@ -129,6 +138,13 @@ it authenticates with SigV4, which the forward proxy leaves intact but base-URL
 mode would break, so `--base-url` does not target Bedrock. `--provider bedrock`
 selects Bedrock's fixtures in forward-proxy mode; `llm-api-degraded` fires a
 `ThrottlingException` (429) against it.
+
+The 200-body scenarios (`malformed-json-response`, `max-tokens-truncation`,
+`malformed-tool-use`, `llm-empty-response`, `anthropic-tool-use-cutoff`,
+`anthropic-refusal`) answer with one complete, non-streaming JSON response, so
+they target **non-streaming calls**. A client that sent `stream: true` gets that
+JSON instead of an SSE stream, and how it reacts depends on the SDK. For
+streaming paths use `llm-streaming-cutoff` or `anthropic-stream-error`.
 
 ---
 
@@ -345,6 +361,73 @@ half-answer as complete.
 
 **What it tests:** checking the finish/stop reason before using output;
 continuation or retry on truncation.
+
+---
+
+### `llm-empty-response`
+
+A 200 whose envelope parses cleanly but carries no content. OpenAI returns
+`message.content: null` with `finish_reason: "content_filter"`; Anthropic
+returns an empty `content` array with an ordinary `stop_reason: "end_turn"`;
+Bedrock Converse returns an empty `output.message.content` with
+`stopReason: "end_turn"`. The response is HTTP 200, but SDK behavior varies:
+plain calls hand back the empty or `null` content, while parsing helpers can
+raise on the finish reason (OpenAI Python's `chat.completions.parse()` raises
+`ContentFilterFinishReasonError` on `finish_reason: "content_filter"`).
+Non-streaming calls only (see [Failure modes and providers](#failure-modes-and-providers)).
+
+**What it tests:** both paths. For an empty result: checking for empty or
+`null` content before using it, not indexing the first content block, not
+storing the blank as an answer, and not retrying without limit a request that
+keeps coming back empty. For an SDK that raises: handling that exception
+instead of crashing the agent loop. In both cases, branching on the
+finish/stop reason.
+
+---
+
+### `context-window-overflow`
+
+The provider refuses the request as too long for the model's context window.
+A matching request gets HTTP **400** with the provider's own error body:
+OpenAI an `invalid_request_error` with `code: "context_length_exceeded"`;
+Anthropic an `invalid_request_error` whose message starts `prompt is too long`;
+Bedrock Converse a `ValidationException` (`x-amzn-errortype` header) with
+`Input is too long for requested model.` The request is rejected outright.
+Nothing is truncated, and no partial answer comes back.
+
+This is a **probabilistic, fixed** fault: each matching request independently
+gets the same 400 with probability 0.2, whatever the real prompt length. A
+shortened retry can be rejected again, and an unchanged retry can get through
+when the dice skip it. faultkit does not inspect the prompt or compare
+retries, so it does not check that your agent reduced its context.
+
+Matched paths: OpenAI `/v1/chat/completions`, Anthropic `/v1/messages`,
+Bedrock `/model/*/converse`. The real APIs reject an oversized prompt before
+any stream starts, so a `stream: true` request to OpenAI or Anthropic gets the
+same 400. Bedrock `ConverseStream` and `InvokeModel` calls are not matched.
+
+**What it tests:** that the agent recognizes a context-length 400 rather than
+treating it as a generic or transient error, and that the error reaches the
+user or a recovery path instead of an empty or invented answer. If your agent
+recovers by trimming history, summarizing, or chunking retrieved context, your
+target's own tests must assert that; the fixture fires regardless of prompt
+size and does not validate the recovery.
+
+---
+
+### `embeddings-degraded`
+
+The embeddings endpoint returns HTTP **503**, intermittently (probability 0.2).
+OpenAI's `/v1/embeddings` gets its `server_error` body; Bedrock `InvokeModel`
+calls on an embedding model (a model ID containing `embed`, such as
+`amazon.titan-embed-text-v2:0` or `cohere.embed-english-v3`) get a 503 with
+`x-amzn-errortype: ServiceUnavailableException`. Chat and Converse calls on the
+same hosts pass through. Anthropic has no embeddings API, so there is no
+Anthropic fixture, and Bedrock is forward-proxy only.
+
+**What it tests:** retry and backoff on the indexing and query-embedding paths;
+what retrieval does when it can't embed the query — fail loudly, fall back to
+keyword search, or (the bug) answer with no retrieved context.
 
 ---
 
@@ -595,12 +678,9 @@ track):
 
 | Scenario | Mechanism | What it will test |
 |---|---|---|
-| `llm-empty-response` | proxy | 200 with empty / null content (guardrail-triggered) |
 | `llm-slow-first-token` | proxy | 8–15s before the first streamed token |
-| `context-window-overflow` | proxy | Outbound prompt silently truncated at the SDK boundary |
 | `gateway-timeout` | proxy | LiteLLM / Portkey / gateway returns slow or hangs |
 | `rag-stale-results` | proxy | Vector DB returns stale or deleted-document results |
-| `embeddings-degraded` | proxy | Embeddings endpoint returns 5xx intermittently |
 | `mcp-tool-schema-mismatch` | proxy | MCP result doesn't match its declared schema |
 | `subagent-timeout` | proxy | A subagent tool call never returns |
 | `memory-write-failure` | proxy / eBPF | Agent state write silently fails; next step reads stale |

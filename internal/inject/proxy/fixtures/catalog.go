@@ -50,6 +50,31 @@ var catalog = map[string]map[string]Fixture{
 		"anthropic": {Path: "/v1/messages", Status: 200, Body: anthropicMalformedToolUse},
 		"bedrock":   {Path: "/model/*/converse", Status: 200, Body: bedrockConverseMalformedToolUse},
 	},
+	// empty-response: a 200 whose envelope parses but carries no usable
+	// content. Like the other JSON-body fixtures it answers with non-streaming
+	// JSON, so it targets non-streaming calls.
+	"empty-response": {
+		"openai":    {Path: "/v1/chat/completions", Status: 200, Body: openAIEmptyResponse},
+		"anthropic": {Path: "/v1/messages", Status: 200, Body: anthropicEmptyResponse},
+		"bedrock":   {Path: "/model/*/converse", Status: 200, Body: bedrockConverseEmptyResponse},
+	},
+	// embeddings-unavailable: the embeddings endpoint returns 503; bodies are
+	// synthesized per vendor. Anthropic has no embeddings API, so no cell. The
+	// Bedrock glob selects InvokeModel on embedding models
+	// (e.g. amazon.titan-embed-text-v2:0, cohere.embed-english-v3).
+	"embeddings-unavailable": {
+		"openai":  {Path: "/v1/embeddings", Status: 503},
+		"bedrock": {Path: "/model/*embed*/invoke", Status: 503, Headers: map[string]string{"x-amzn-errortype": "ServiceUnavailableException"}},
+	},
+	// context-length-exceeded: the provider rejects the request as over the
+	// model's context window with a 400. The body is explicit here rather than
+	// a 400 entry in the per-vendor error tables, which would change what every
+	// raw `http_status: 400` fault on these hosts returns.
+	"context-length-exceeded": {
+		"openai":    {Path: "/v1/chat/completions", Status: 400, Body: openAIContextLengthExceeded},
+		"anthropic": {Path: "/v1/messages", Status: 400, Body: anthropicContextLengthExceeded},
+		"bedrock":   {Path: "/model/*/converse", Status: 400, Headers: map[string]string{"x-amzn-errortype": "ValidationException"}, Body: bedrockContextLengthExceeded},
+	},
 	// Anthropic-distinctive modes (no cross-provider equivalent yet).
 	"stream-error": {
 		"anthropic": {Path: "/v1/messages", Status: 200, Headers: map[string]string{"Content-Type": "text/event-stream"}, Body: anthropicStreamError},
@@ -174,3 +199,21 @@ const anthropicToolUseCutoff = `{"id":"msg_test","type":"message","role":"assist
 // anthropicRefusal is a 200 whose stop_reason is "refusal" — the model declined.
 // Agents should treat this distinctly from a normal completion.
 const anthropicRefusal = `{"id":"msg_test","type":"message","role":"assistant","model":"claude-sonnet-4","content":[{"type":"text","text":"I can't help with that request."}],"stop_reason":"refusal","usage":{"input_tokens":10,"output_tokens":8}}`
+
+// empty-response: a 200 with nothing to act on. OpenAI returns content null
+// with finish_reason "content_filter"; Anthropic returns an empty content array
+// with an ordinary "end_turn". An agent that indexes the first content block or
+// stores the text unchecked fails here.
+const (
+	openAIEmptyResponse    = `{"id":"chatcmpl-test","object":"chat.completion","model":"gpt-4o-mini","choices":[{"index":0,"message":{"role":"assistant","content":null},"finish_reason":"content_filter"}],"usage":{"prompt_tokens":10,"completion_tokens":0,"total_tokens":10}}`
+	anthropicEmptyResponse = `{"id":"msg_test","type":"message","role":"assistant","model":"claude-sonnet-4","content":[],"stop_reason":"end_turn","usage":{"input_tokens":10,"output_tokens":0}}`
+)
+
+// context-length-exceeded: the vendor's 400 for a prompt over the context
+// window. OpenAI uses its standard error envelope with code
+// "context_length_exceeded"; Anthropic uses invalid_request_error with a
+// "prompt is too long" message.
+const (
+	openAIContextLengthExceeded    = `{"error":{"message":"This model's maximum context length is 128000 tokens. However, your messages resulted in 131072 tokens. Please reduce the length of the messages.","type":"invalid_request_error","param":"messages","code":"context_length_exceeded"}}`
+	anthropicContextLengthExceeded = `{"type":"error","error":{"type":"invalid_request_error","message":"prompt is too long: 210000 tokens > 200000 maximum"}}`
+)
