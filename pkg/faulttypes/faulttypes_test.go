@@ -88,3 +88,49 @@ func TestFaultIsHTTPIsSyscall(t *testing.T) {
 		})
 	}
 }
+
+// response_mutation is an HTTP-level field. Its one value is accepted on
+// its own or with a delay; any other value, or another HTTP-level field
+// next to it, is rejected.
+func TestFaultResponseMutation(t *testing.T) {
+	const mcp = "mcp-schema-mismatch"
+	tests := []struct {
+		name         string
+		fault        faulttypes.Fault
+		wantSentinel error
+		wantAnyErr   bool
+	}{
+		{name: "alone", fault: faulttypes.Fault{ResponseMutation: mcp}},
+		{name: "with a delay", fault: faulttypes.Fault{ResponseMutation: mcp, DelayMS: 50, DelayJitterMS: 10}},
+		{name: "unknown value", fault: faulttypes.Fault{ResponseMutation: "mcp-schema"}, wantAnyErr: true},
+		{name: "value in another case", fault: faulttypes.Fault{ResponseMutation: "MCP-SCHEMA-MISMATCH"}, wantAnyErr: true},
+		{name: "with http status", fault: faulttypes.Fault{ResponseMutation: mcp, HTTPStatus: 200}, wantAnyErr: true},
+		{name: "with headers", fault: faulttypes.Fault{ResponseMutation: mcp, ResponseHeaders: map[string]string{"X": "Y"}}, wantAnyErr: true},
+		{name: "with body", fault: faulttypes.Fault{ResponseMutation: mcp, ResponseBody: "{}"}, wantAnyErr: true},
+		{name: "with stream cutoff", fault: faulttypes.Fault{ResponseMutation: mcp, StreamCutoffTokens: 3}, wantAnyErr: true},
+		{name: "with errno", fault: faulttypes.Fault{ResponseMutation: mcp, Errno: "EIO"}, wantSentinel: faulttypes.ErrFaultMixed},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.fault.Validate()
+			switch {
+			case tt.wantSentinel != nil:
+				if !errors.Is(err, tt.wantSentinel) {
+					t.Fatalf("got %v, want %v", err, tt.wantSentinel)
+				}
+			case tt.wantAnyErr:
+				if err == nil {
+					t.Fatalf("got nil, want any error")
+				}
+			default:
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+			}
+		})
+	}
+
+	if f := (faulttypes.Fault{ResponseMutation: mcp}); !f.IsHTTP() || f.IsSyscall() {
+		t.Errorf("IsHTTP, IsSyscall = %v, %v; want true, false", f.IsHTTP(), f.IsSyscall())
+	}
+}

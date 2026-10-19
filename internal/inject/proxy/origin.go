@@ -94,7 +94,9 @@ func (h *originHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Pass-through (no fault), delay only or stream-cutoff: forward to the
 	// real upstream at the stripped API path; ModifyResponse applies the
-	// cutoff if set.
+	// cutoff if set. A response mutation is forward-proxy only (base-URL
+	// mode can't route MCP hosts), so here it passes through unmutated and
+	// adds no event.
 	r.URL.Path = rest
 	ctx := context.WithValue(r.Context(), ctxOriginProvider, p)
 	if exp != nil {

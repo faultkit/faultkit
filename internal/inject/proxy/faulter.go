@@ -29,7 +29,8 @@ const ctxKeyExperiment = "faultkit.experiment"
 // injector. It matches against the scenario, rolls the dice, holds the
 // request for the fault's delay if it has one, and then either skips the
 // upstream round trip (synthetic responses), wraps the upstream response
-// (streaming-cutoff), or forwards it unchanged (delay only).
+// (streaming-cutoff), mutates it (response_mutation), or forwards it
+// unchanged (delay only).
 type Faulter struct {
 	matcher *Matcher
 
@@ -128,9 +129,16 @@ func (f *Faulter) ModifyRequest(req *http.Request) error {
 		dropConn(ctx)
 		return nil
 	}
-	// Synthetic faults short-circuit the round trip. A stream cutoff needs
-	// the real upstream response, and a delay-only fault forwards the
-	// request unchanged.
+	// A response mutation needs the JSON-RPC id of a tools/call request to
+	// find the response it edits. The body is read and put back unchanged.
+	if exp.Fault.ResponseMutation != "" {
+		if id, ok := toolsCallID(req); ok {
+			ctx.Set(ctxKeyRPCID, id)
+		}
+	}
+	// Synthetic faults short-circuit the round trip. A stream cutoff or a
+	// response mutation needs the real upstream response, and a delay-only
+	// fault forwards the request unchanged.
 	if isSynthetic(exp.Fault) {
 		ctx.SkipRoundTrip()
 	}
@@ -157,6 +165,17 @@ func (f *Faulter) ModifyResponse(res *http.Response) error {
 
 	host := normalizeHost(hostFromRequest(res.Request))
 
+	if exp.Fault.ResponseMutation != "" {
+		// mcp-schema-mismatch, the only mutation, edits the response to a
+		// tools/call request. Any other request passes through unfired,
+		// unless its delay already fired.
+		if id, ok := ctx.Get(ctxKeyRPCID); ok {
+			mutateMCPResponse(res, id, func() {
+				f.emitEffect(res.Request, exp, host)
+			})
+		}
+		return nil
+	}
 	if exp.Fault.StreamCutoffTokens > 0 {
 		// The cut happens later, on the stream's forwarding goroutine.
 		// Without a delay, the fault fires only if the stream reaches the
@@ -183,7 +202,8 @@ func (f *Faulter) ModifyResponse(res *http.Response) error {
 // isSynthetic reports whether faultkit answers a request for f itself,
 // without the upstream round trip: f sets a status, body or headers and no
 // stream cutoff. A delay-only fault is forwarded after its delay, and a
-// stream cutoff needs the real upstream stream.
+// stream cutoff needs the real upstream stream. So does a response
+// mutation, which validation never pairs with a status, body or headers.
 func isSynthetic(f faulttypes.Fault) bool {
 	return f.StreamCutoffTokens == 0 &&
 		(f.HTTPStatus != 0 || len(f.ResponseHeaders) > 0 || f.ResponseBody != "")
@@ -206,7 +226,8 @@ func applySynthetic(res *http.Response, syn fixtures.Synthetic) {
 }
 
 // writeSyntheticResponse renders a fully synthetic fault for exp onto w and
-// emits the fired event, unless the fault's delay already did. It is the
+// emits the fired event through emitEffect (not if the fault's delay
+// already did, or Stop has begun). It is the
 // http.ResponseWriter analogue of applySynthetic (which mutates an
 // *http.Response on the forward-proxy path), so base-URL/origin mode
 // renders synthetic faults identically without re-implementing the shape.
