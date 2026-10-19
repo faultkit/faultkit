@@ -14,8 +14,8 @@ name: my-scenario              # required
 description: |                  # optional
   Free-form description shown by `faultkit scenario list`.
 requires:                       # optional
-  platform: linux               # optional, currently only "linux" is meaningful
-  kernel_min: "5.8"             # optional, advisory; faultkit check uses it
+  platform: linux               # optional, advisory; not enforced
+  kernel_min: "5.8"             # optional, advisory; not enforced
 experiments:                    # required, at least one
   - ...
 ```
@@ -24,15 +24,17 @@ experiments:                    # required, at least one
 |---|---|---|---|
 | `name` | string | yes | Kebab-case (`[a-z0-9-]+`, must start with a letter). Identifies the scenario in `faultkit scenario list`. |
 | `description` | string | no | One-line summary shown by `scenario list`. |
-| `requires.platform` | string | no | Currently only `linux` is meaningful (eBPF scenarios). Absence = no constraint. |
-| `requires.kernel_min` | string | no | Advisory minimum kernel (e.g. `"5.8"` for ringbuf). `faultkit check` reports it. |
+| `requires.platform` | string | no | Advisory: currently only `linux` is meaningful (eBPF scenarios). faultkit doesn't enforce it; eBPF mode checks the host itself. |
+| `requires.kernel_min` | string | no | Advisory minimum kernel (e.g. `"5.8"` for ringbuf). Not enforced: neither `faultkit check` nor `faultkit run` reads it. eBPF mode itself requires Linux 5.8+. |
 | `experiments` | list | yes | At least one. See below. |
 
 ## Experiment
 
 Each experiment is one fault rule, written in one of two mutually
 exclusive forms. Within a scenario they're evaluated in YAML order —
-first match wins.
+first match wins. If the matching experiment's dice roll declines, the
+request passes through unfaulted; later experiments aren't tried. eBPF
+mode only uses a scenario's first syscall experiment.
 
 - **Raw** — an explicit `fault` + `match` (full control over any
   host/path/syscall). Use for custom scenarios.
@@ -75,7 +77,7 @@ narrow to one. Some modes are provider-specific and have only one fixture
 |---|---|---|---|
 | `name` | string | yes | Free-form identifier; appears in events and reports. |
 | `failure` | string | fixture-driven | A failure-mode id (e.g. `rate-limited`, `malformed-json`, `streaming-cutoff`). Mutually exclusive with `fault`/`match`. |
-| `provider` | string | no | Restrict a fixture-driven experiment to one provider id (`openai`, `anthropic`). Only valid alongside `failure`. |
+| `provider` | string | no | Restrict a fixture-driven experiment to one provider id (`openai`, `anthropic`, `bedrock`). Only valid alongside `failure`. |
 | `fault` | object | raw | What to inject. See [Fault](#fault). |
 | `match` | object | raw | When to inject. See [Match](#match). |
 | `probability` | float | yes | 0.0–1.0 inclusive. Independent dice roll per matched request (proxy) or syscall (eBPF). |
@@ -94,7 +96,7 @@ fault:
     Retry-After: "30"
     X-Some-Header: value
   response_body: '{"error":"..."}'     # optional, replaces upstream body
-  stream_cutoff_tokens: 80             # optional, mutually exclusive with response_body
+  stream_cutoff_tokens: 80             # optional; when set, the fields above are ignored
 ```
 
 | Field | Type | Notes |
@@ -102,7 +104,7 @@ fault:
 | `http_status` | int | The status code the proxy returns to the target. Sent with `X-Faultkit-Synthetic: true`. |
 | `response_headers` | map[string]string | Merged into the synthetic response. |
 | `response_body` | string | If set, replaces the upstream body verbatim. |
-| `stream_cutoff_tokens` | int | For SSE streams: forwards N content deltas (≈ tokens) from upstream then drops the connection without `[DONE]`. Lifecycle events like `message_start` don't count. Mutually exclusive with `response_body`. |
+| `stream_cutoff_tokens` | int | For SSE streams: forwards N content deltas (≈ tokens) from upstream then drops the connection without `[DONE]`. Lifecycle events like `message_start` don't count. When set, faultkit forwards the real upstream response and ignores `http_status`, `response_headers`, and `response_body`; combining them isn't rejected. |
 
 A fault is HTTP-level if any of `http_status`, `response_headers`,
 `response_body`, or `stream_cutoff_tokens` is set.
@@ -133,7 +135,7 @@ match:
 
 | Field | Type | Notes |
 |---|---|---|
-| `host` | string | Glob against the request's host (no port). `*` matches any run of characters; `?` matches a single character. The request host is lowercased before matching, so write your pattern in lowercase. |
+| `host` | string | Glob against the request's host (no port). `*` matches any run of characters; `?` matches a single character. The request host is lowercased before matching, so write your pattern in lowercase. Required in practice: a match with only `path` passes validation but never fires. |
 | `path` | string | Glob against the request URL path. Same wildcard semantics as `host`. Optional — absence means "match any path on this host". |
 
 ### Syscall match (eBPF mode)

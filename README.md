@@ -17,7 +17,7 @@
 
 </div>
 
-> **Status:** v0.1 — fourteen scenarios end-to-end (LLM, Anthropic-specific, Bedrock-specific, and syscall-level).
+> **Status:** v0.1 — LLM, Anthropic-specific, Bedrock-specific, and syscall-level scenarios run end-to-end.
 > **Platforms:** macOS and Linux for HTTP scenarios. Linux 5.8+ (x86-64) for syscall-level scenarios.
 
 ---
@@ -28,7 +28,7 @@ Your agent chains LLM calls, tool subprocesses, RAG lookups, HTTP requests. One 
 
 The retry logic for a `429` from OpenAI mid-chain. The cleanup when a tool subprocess gets `SIGPIPE`'d. The fallback when your vector DB returns shuffled results. **You wrote that code. You've never seen it run.**
 
-faultkit deterministically triggers the failures your agents hit in production, so you can fix them before your users do.
+faultkit triggers the failures your agents hit in production, so you can fix them before your users do.
 
 ---
 
@@ -41,6 +41,10 @@ can also prove that it fails safely. In Claude Code:
 /plugin marketplace add faultkit/skills
 /plugin install faultkit@faultkit
 ```
+
+The skill runs the faultkit you have installed, 0.1.3 or later (see
+[Install](#install)), and never downloads or builds it. If faultkit isn't
+installed, proving stops and prints the install commands.
 
 | Command | What it does |
 |---|---|
@@ -124,19 +128,14 @@ That's it. No mocks. No fixtures. Your agent code calls `api.openai.com` exactly
 
 ```text
 === faultkit summary ===
-scenario:    llm-api-degraded
-target:      pytest tests/agent/
-duration:    14.2s
-faults fired: 7 (target: ~20% of 34 requests to api.openai.com)
+scenario:     llm-api-degraded
+target:       pytest tests/agent/
+duration:     14.2s
+faults fired: 7
 target exit:  1 (FAIL)
-
-  tests/agent/test_planning.py::test_recovers_from_rate_limit  FAILED
-  tests/agent/test_research.py::test_handles_partial_context   FAILED
-
-run with --verbose to see each fault as it fires
 ```
 
-Two failing tests you didn't have yesterday. Two production bugs you won't have tomorrow.
+A failing run you didn't have yesterday. A production bug you won't have tomorrow.
 
 ---
 
@@ -146,13 +145,14 @@ faultkit ships scenarios mapped to real production failure modes. Each one targe
 
 ### LLM and gateway
 
-These are **failure modes** — provider-agnostic recipes. By default they fire
-against every provider faultkit knows (OpenAI, Anthropic, Bedrock); narrow to
-one with `--provider`.
+These are **failure modes** — provider-agnostic recipes. By default each fires
+against every provider that has a fixture for it: OpenAI, Anthropic, and
+Bedrock, except `llm-streaming-cutoff`, whose `streaming-cutoff` mode has no
+Bedrock fixture (OpenAI and Anthropic only). Narrow to one with `--provider`.
 
-| Scenario | What it does | v0.1 |
+| Scenario | What it does | Status |
 |---|---|:---:|
-| `llm-api-degraded` | Inject 429 / 503 / timeout into requests to OpenAI, Anthropic, and Bedrock | ✅ |
+| `llm-api-degraded` | Rate-limit requests to OpenAI and Anthropic (HTTP 429, `Retry-After: 30`) and Bedrock (HTTP 429 `ThrottlingException`) | ✅ |
 | `malformed-json-response` | LLM returns 200 OK with syntactically invalid JSON in the body | ✅ |
 | `malformed-tool-use` | Tool call with malformed / schema-violating arguments, breaking dispatch | ✅ |
 | `max-tokens-truncation` | 200 with truncated content (`finish_reason: length` / `stop_reason: max_tokens`) an agent treats as complete | ✅ |
@@ -167,7 +167,7 @@ one with `--provider`.
 Failure modes Claude surfaces that have no direct OpenAI equivalent, so they
 ship as their own scenarios (Anthropic-only).
 
-| Scenario | What it does | v0.1 |
+| Scenario | What it does | Status |
 |---|---|:---:|
 | `anthropic-overloaded` | HTTP 529 `overloaded_error` under heavy load | ✅ |
 | `anthropic-stream-error` | SSE stream emits an `error` event mid-stream, no `message_stop` terminator | ✅ |
@@ -181,30 +181,30 @@ Amazon Bedrock failures with no cross-provider equivalent. Bedrock is
 **forward-proxy only** — it authenticates with SigV4, which the proxy leaves
 intact but base-URL mode would break, so `--base-url` doesn't target it.
 
-| Scenario | What it does | v0.1 |
+| Scenario | What it does | Status |
 |---|---|:---:|
 | `bedrock-model-timeout` | HTTP 408 `ModelTimeoutException` — the model didn't respond in time | ✅ |
 | `bedrock-service-unavailable` | HTTP 503 `ServiceUnavailableException` under load | ✅ |
 
 ### RAG and vector DB
 
-| Scenario | What it does | v0.1 |
+| Scenario | What it does | Status |
 |---|---|:---:|
 | `rag-stale-results` | Pinecone / Weaviate / Qdrant returns stale or deleted-document results | 🛣️ |
 | `embeddings-degraded` | Embeddings endpoint returns 5xx intermittently | 🛣️ |
 
 ### Tool calls and subprocesses
 
-| Scenario | What it does | v0.1 |
+| Scenario | What it does | Status |
 |---|---|:---:|
-| `tool-permission-denied` | `EACCES` / `EPERM` on the agent's file or path access | ✅ |
+| `tool-permission-denied` | `EACCES` when the agent opens a file or directory (`openat`) | ✅ |
 | `tool-call-flaky` | Subprocess returns truncated stdout with exit 0 — agent reasons on partial data | 🛣️ |
 | `partial-tool-result` | Tool returns a valid-but-incomplete result (half a JSON array), exit 0 | 🛣️ |
 | `tool-slow` | Subprocess hangs for N seconds, exposes timeout-handling bugs | 🛣️ |
 
 ### Agent orchestration and MCP
 
-| Scenario | What it does | v0.1 |
+| Scenario | What it does | Status |
 |---|---|:---:|
 | `mcp-tool-schema-mismatch` | MCP server returns a result that doesn't match its declared schema | 🛣️ |
 | `subagent-timeout` | A subagent tool call never returns — tests the orchestration ceiling | 🛣️ |
@@ -212,14 +212,14 @@ intact but base-URL mode would break, so `--base-url` doesn't target it.
 
 ### Backend classics
 
-| Scenario | What it does | v0.1 |
+| Scenario | What it does | Status |
 |---|---|:---:|
-| `flaky-network` | Probabilistic `ECONNRESET` and latency spikes (Linux, syscall-level) | ✅ |
+| `flaky-network` | Probabilistic `ECONNRESET` on `recvmsg` / `recvfrom` (Linux, syscall-level) | ✅ |
 | `disk-full` | `ENOSPC` on write after N bytes | 🛣️ |
 | `slow-dns` | 500–5000ms delay on resolution, intermittent `EAI_AGAIN` | 🛣️ |
 | `fd-exhaustion` | `EMFILE` after N open descriptors | 🛣️ |
 
-✅ = working in v0.1 today · 🛣️ = planned
+✅ = shipped · 🛣️ = planned
 
 All scenarios are free and open source. Forever.
 
@@ -229,7 +229,7 @@ All scenarios are free and open source. Forever.
 
 You don't need to know this to use faultkit. But if you're going to run it in your CI, you'll want to.
 
-faultkit picks the right injection mechanism for each scenario automatically. Three are supported:
+faultkit picks the right injection mechanism for each scenario automatically. Two ship today, the HTTPS proxy (with its base-URL mode) and eBPF; an LD_PRELOAD shim is planned:
 
 **HTTPS proxy.** For LLM / RAG / gateway scenarios. faultkit runs an in-process MITM proxy, terminates TLS with a CA it provisions for the target process only, and rewrites HTTP responses (status codes, bodies, streaming). The target sees a real HTTP 429 from a real TLS connection, because that's what it gets. Connections are served over HTTP/1.1 (HTTP/2 isn't proxied yet), which is transparent to virtually every HTTP client. Cross-platform, no privileges required.
 
@@ -241,11 +241,11 @@ Either way, if *no* request actually reaches faultkit (the client ignored the pr
 
 **eBPF, Linux 5.8+.** For syscall-level scenarios — backend chaos, tool-call subprocess failures, file permission denials. faultkit attaches small eBPF programs to the relevant syscall kprobes (`recvmsg`, `recvfrom`, `openat`) and uses `bpf_override_return` to rewrite syscall return values for processes inside the target's PID tree. The target sees a real `ECONNRESET`, a real `EACCES`, because that's what the kernel returned.
 
-**LD_PRELOAD shim, v0.2.** For the gap in between — dynamically linked targets where you want syscall-level fidelity without root, or you're on macOS (where `DYLD_INSERT_LIBRARIES` plays the same role). The shim is a small C library that interposes on libc functions and forwards faults from the runner via shared memory.
+**LD_PRELOAD shim (planned).** For the gap in between — dynamically linked targets where you want syscall-level fidelity without root, or you're on macOS (where `DYLD_INSERT_LIBRARIES` plays the same role). The planned shim is a small C library that interposes on libc functions. It doesn't ship yet.
 
-Auto-mode is the default. Linux + caps available + scenario fits → eBPF. HTTP scenario → proxy. macOS → proxy and (in v0.2) shim. You can always force a mode with `--mode=ebpf` / `--mode=proxy` / `--mode=shim`, and add `--base-url` to make proxy mode inject base-URL env instead of `HTTPS_PROXY`.
+Auto-mode is the default: a scenario with any HTTP experiment runs in proxy mode, and a syscall-only scenario runs in eBPF mode. Each run uses one mechanism, so in auto-mode a scenario that mixes the two runs only its HTTP experiments. Where eBPF isn't available (on macOS today, or on Linux without the kernel, architecture, or capabilities it needs), a syscall scenario fails with `eBPF mode is not available on this host` and exit code `2`. You can force a mode with `--mode=ebpf` / `--mode=proxy`, and add `--base-url` to make proxy mode inject base-URL env instead of `HTTPS_PROXY`.
 
-Why three mechanisms instead of one: the failures your agent hits in production *don't all live at the same layer*. An LLM 429 lives in HTTP semantics on top of TLS. A `SIGPIPE` on a tool subprocess lives at the pipe stdio layer. An `ENOSPC` lives at the filesystem syscall layer. A single-mechanism tool can fake the others, but the faked version exercises different code paths than the real one. faultkit gives you the real one.
+Why more than one mechanism: the failures your agent hits in production *don't all live at the same layer*. An LLM 429 lives in HTTP semantics on top of TLS. A `SIGPIPE` on a tool subprocess lives at the pipe stdio layer. An `ENOSPC` lives at the filesystem syscall layer. A single-mechanism tool can fake the others, but the faked version exercises different code paths than the real one. faultkit gives you the real one.
 
 ---
 
@@ -256,7 +256,7 @@ Write a YAML file. faultkit handles the rest.
 ```yaml
 # nightmare.yaml
 name: nightmare
-description: Multiple failures happening simultaneously.
+description: Two LLM providers failing in the same run.
 
 experiments:
   - name: "OpenAI rate-limited mid-reasoning"
@@ -268,19 +268,12 @@ experiments:
       host: api.openai.com
     probability: 0.2
 
-  - name: "Network drops on backend recv"
+  - name: "Anthropic overloaded on the fallback"
     fault:
-      errno: ECONNRESET
+      http_status: 529
     match:
-      syscall: recvmsg
-    probability: 0.05
-
-  - name: "Tool can't read its config"
-    fault:
-      errno: EACCES
-    match:
-      syscall: openat
-    probability: 0.05
+      host: api.anthropic.com
+    probability: 0.1
 ```
 
 Run it:
@@ -289,12 +282,17 @@ Run it:
 faultkit run --config nightmare.yaml -- go test ./...
 ```
 
+A run uses one injection mechanism, so keep syscall experiments (`errno` +
+`syscall`) in a scenario of their own. When a scenario mixes the two, auto-mode
+runs only its HTTP experiments, and eBPF mode only ever runs a scenario's first
+syscall experiment.
+
 ### Failure modes and providers
 
 The builtin LLM scenarios above aren't written per-provider. They're **failure
 modes** — provider-agnostic recipes whose concrete response shape comes from a
 per-provider fixture. Name a mode and faultkit fans it out across every provider
-it knows:
+that has a fixture for it:
 
 ```yaml
 experiments:
@@ -472,14 +470,18 @@ steps:
 In a monorepo, set `working-directory` to the project's directory. The other
 inputs are in the [action's README](https://github.com/faultkit/action#inputs).
 
-In other CI systems, one step replays the same proofs. It exits 0 only when
-every invariant was proven under fault:
+In other CI systems, two steps replay the same proofs: install faultkit,
+then run the skill's helper. The helper is a single standard-library Python
+file; it uses the faultkit it is given and never downloads one. It exits 0
+only when every invariant was proven under fault:
 
 ```yaml
 - name: Prove invariants
   run: |
-    curl -fsSLo run_faultkit.py https://raw.githubusercontent.com/faultkit/skills/b6e3b40eac4dd55585aeeaf65f9a17344584f7ba/faultkit/scripts/run_faultkit.py
-    python3 run_faultkit.py --manifest .faultkit/invariants/manifest.json
+    # The helper never installs faultkit; this pinned install is verified by the Go checksum database.
+    go install github.com/faultkit/faultkit/cmd/faultkit@v0.1.3
+    curl -fsSLo run_faultkit.py https://raw.githubusercontent.com/faultkit/skills/252072f13f125fcc9390f671820c849328eb7538/faultkit/scripts/run_faultkit.py
+    python3 run_faultkit.py --faultkit-bin "$(go env GOPATH)/bin/faultkit" --manifest .faultkit/invariants/manifest.json
 ```
 
 More CI recipes: [examples/](./examples/).

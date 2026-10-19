@@ -1,6 +1,6 @@
 # Quickstart
 
-Five minutes from zero to a deterministic fault injection against your
+Five minutes from zero to your first fault injection against your
 own code.
 
 ---
@@ -26,7 +26,8 @@ faultkit check
 
 `faultkit check` reports which injection modes are available on this
 host. On macOS or any non-Linux box you'll see proxy mode only; on
-Linux 5.8+ both modes light up (eBPF needs `CAP_BPF` or root).
+Linux 5.8+ (x86-64) both modes light up (eBPF needs `CAP_BPF`,
+`CAP_NET_ADMIN`, and `CAP_PERFMON`, or root).
 
 ## Pick a scenario
 
@@ -42,8 +43,10 @@ anthropic-refusal            [proxy]  Anthropic returns 200 with stop_reason "re
 anthropic-request-too-large  [proxy]  Anthropic returns HTTP 413 request_too_large for an oversized request.
 anthropic-stream-error       [proxy]  Anthropic SSE stream emits an error event (overloaded_error) mid-stream, with no message_stop terminator.
 anthropic-tool-use-cutoff    [proxy]  Anthropic returns a tool_use block truncated by max_tokens (stop_reason max_tokens, not tool_use) — the tool call is incomplete.
+bedrock-model-timeout        [proxy]  Bedrock returns HTTP 408 ModelTimeoutException — the model did not respond in time.
+bedrock-service-unavailable  [proxy]  Bedrock returns HTTP 503 ServiceUnavailableException under load.
 flaky-network                [ebpf]   Inject ECONNRESET on TCP recv, simulating flaky network conditions.
-llm-api-degraded             [proxy]  Inject 429/503/timeout into requests to OpenAI and Anthropic.
+llm-api-degraded             [proxy]  Rate-limit requests to OpenAI and Anthropic (HTTP 429, Retry-After 30) and Bedrock (HTTP 429 ThrottlingException).
 llm-streaming-cutoff         [proxy]  Streaming chat completion drops the connection mid-token (OpenAI SSE without [DONE]; Anthropic SSE without message_stop).
 malformed-json-response      [proxy]  LLM returns 200 OK with syntactically invalid JSON in the body.
 malformed-tool-use           [proxy]  LLM returns a tool call with malformed or schema-violating arguments, breaking tool dispatch.
@@ -54,9 +57,11 @@ tool-permission-denied       [ebpf]   File operations fail with EACCES (permissi
 The `[proxy]` and `[ebpf]` tags tell you which mechanism the scenario
 needs. Proxy works everywhere; eBPF needs Linux 5.8+.
 
-The LLM scenarios fire against every provider faultkit knows (OpenAI and
-Anthropic); add `--provider anthropic` to narrow to one. The `anthropic-*`
-scenarios are Anthropic-only. See [docs/scenarios.md](./scenarios.md#failure-modes-and-providers).
+Each LLM scenario fires against every provider that has a fixture for its
+failure mode (OpenAI, Anthropic, and Bedrock; `llm-streaming-cutoff` has no
+Bedrock fixture); add `--provider anthropic` to narrow to one. The
+`anthropic-*` scenarios are Anthropic-only, and the `bedrock-*` scenarios are
+Bedrock-only. See [docs/scenarios.md](./scenarios.md#failure-modes-and-providers).
 
 To see a scenario's full YAML:
 
