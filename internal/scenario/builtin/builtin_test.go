@@ -27,6 +27,7 @@ func TestBuiltinsLoadable(t *testing.T) {
 		"malformed-json-response",
 		"malformed-tool-use",
 		"max-tokens-truncation",
+		"rag-stale-results",
 		"tool-permission-denied",
 	} {
 		if !slices.Contains(got, want) {

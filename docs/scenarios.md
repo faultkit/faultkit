@@ -49,11 +49,13 @@ Narrow with `--provider` (see [Failure modes and providers](#failure-modes-and-p
 | `bedrock-service-unavailable` | proxy | HTTP 503 `ServiceUnavailableException` |
 
 **RAG and vector DB** — embeddings endpoints on OpenAI and Bedrock (Anthropic
-has no embeddings API):
+has no embeddings API), and vector queries on Pinecone and Qdrant Cloud
+(forward-proxy only):
 
 | Scenario | Mode | What it tests |
 |---|---|---|
 | `embeddings-degraded` | proxy | Embeddings endpoint returns 503 |
+| `rag-stale-results` | proxy | Vector query returns matches for deleted / nonexistent document ids |
 
 **Syscall-level** — Linux, eBPF:
 
@@ -132,7 +134,7 @@ a fixture, never a new scenario. Failures with no cross-provider equivalent
 just modes with a single-provider fixture. Raw `fault` + `match` scenarios
 (custom hosts and paths) are unaffected and behave exactly as before.
 
-Providers with a fixture: `openai`, `anthropic`, and `bedrock` (Amazon Bedrock,
+LLM providers with a fixture: `openai`, `anthropic`, and `bedrock` (Amazon Bedrock,
 `bedrock-runtime.<region>.amazonaws.com`). **Bedrock is forward-proxy only** —
 it authenticates with SigV4, which the forward proxy leaves intact but base-URL
 mode would break, so `--base-url` does not target Bedrock. `--provider bedrock`
@@ -145,6 +147,10 @@ The 200-body scenarios (`malformed-json-response`, `max-tokens-truncation`,
 they target **non-streaming calls**. A client that sent `stream: true` gets that
 JSON instead of an SSE stream, and how it reacts depends on the SDK. For
 streaming paths use `llm-streaming-cutoff` or `anthropic-stream-error`.
+The vector databases `pinecone` (index hosts, `*.pinecone.io`) and `qdrant`
+(Qdrant Cloud, `*.cloud.qdrant.io`) are forward-proxy only as well. Their only
+fixtures are for `stale-results`, so the LLM modes never fan out to them — see
+[Vector DB scenarios](#vector-db-scenarios).
 
 ---
 
@@ -504,6 +510,87 @@ backoff rather than treating it as a permanent failure.
 
 ---
 
+## Vector DB scenarios
+
+RAG failures at the retrieval layer, against two forward-proxy-only
+providers. Fixture-driven — see
+[Failure modes and providers](#failure-modes-and-providers).
+
+### `rag-stale-results`
+
+A vector query succeeds — HTTP 200, a well-formed body — but its matches
+point at documents that are meant not to exist: deleted from the source
+corpus while still in the index, or never there at all. In production this
+happens when deletes don't reach the index, or a re-index lags the corpus.
+
+faultkit answers the query endpoint with a canned body in the vendor's
+documented response shape:
+
+| Provider | Host | Endpoint | Stale ids |
+|---|---|---|---|
+| `pinecone` | `*.pinecone.io` (index hosts) | `/query` | `faultkit-stale-doc-1`, `faultkit-stale-doc-2` in `matches[]` |
+| `qdrant` | `*.cloud.qdrant.io` (Qdrant Cloud, any port) | `/collections/*/points/query` | UUIDs `00000000-0000-4000-8000-00000000fa01` and `…fa02` in `result.points[]` |
+
+Each match carries `metadata` (Pinecone) or a `payload` (Qdrant) with
+`source` and `text` keys; the text says the document is stale. faultkit
+doesn't read the request, so the number of matches, their scores, and the
+Pinecone `namespace` (`""`, the default namespace) are fixed.
+
+The ids are chosen to be unlikely in a real index, but faultkit doesn't look
+at your store: make sure no record with these ids exists there, or the run
+isn't testing a missing document.
+
+**What it tests:** what your pipeline does with retrieved ids it can't
+resolve — whether it looks them up, rejects them or falls back, and whether
+it cites them. faultkit only injects the response; the proof comes from your
+target's own assertions on that lookup, rejection/fallback and citation
+behavior. A target that only checks that the query succeeded passes, and so
+does one that uses the inline `metadata`/`payload` text without looking the
+ids up at all. A fired fault doesn't show deletion propagation, authorization
+isolation, retry safety, or a general RAG invariant.
+
+**Limits:**
+
+- **Forward-proxy only.** The vector-DB client must route through
+  `HTTPS_PROXY` and trust faultkit's CA (`SSL_CERT_FILE`,
+  `REQUESTS_CA_BUNDLE`, …); `--base-url` doesn't target vector databases.
+  Pinecone's Python SDK documents its proxy settings as the `proxy_url` and
+  `ssl_ca_certs` arguments — if your client doesn't pick up the environment,
+  pass `os.environ["HTTPS_PROXY"]` and `os.environ["SSL_CERT_FILE"]` there.
+  If no query reaches faultkit, nothing fires, and zero fired faults never
+  produce a passing run: faultkit exits `3` if the target otherwise
+  succeeded, or `1` if the target itself failed — with verdict
+  `invalid_evidence` either way.
+- **REST only.** gRPC clients (Pinecone's `GrpcIndex`, Qdrant on port 6334
+  or with `prefer_grpc=True`) aren't faulted. If they honour
+  `HTTPS_PROXY`/`grpc_proxy`, they fail to connect at all: the proxy only
+  offers HTTP/1.1, and gRPC needs HTTP/2, so the TLS handshake ends with
+  `no_application_protocol`.
+- **One endpoint per provider.** Pinecone's integrated-inference search
+  (`/records/namespaces/*/search`), Qdrant's legacy `/points/search`, and
+  the batch `/points/query/batch` return different shapes and aren't faulted.
+- **Qdrant Cloud only.** A self-hosted cluster doesn't match
+  `*.cloud.qdrant.io`. Write a raw experiment for your host instead (host
+  without the port; some clients, Go's `net/http` among them, never proxy
+  `localhost`):
+
+  ```yaml
+  name: stale-qdrant-selfhosted
+  experiments:
+    - name: stale-qdrant
+      fault:
+        http_status: 200
+        response_body: '{"result":{"points":[{"id":"00000000-0000-4000-8000-00000000fa01","version":7,"score":0.91,"payload":{"text":"stale"}}]},"status":"ok","time":0.002}'
+      match:
+        host: qdrant.internal.example.com
+        path: /collections/*/points/query
+      probability: 0.2
+  ```
+
+  The same form lets you return the metadata keys your framework expects.
+
+---
+
 ## eBPF scenarios
 
 These scenarios use faultkit's eBPF injector. Small kernel programs
@@ -673,14 +760,12 @@ The following scenarios are planned. They don't ship yet, and
 contributions are welcome:
 
 Sequenced by the capability each needs (new LLM fixtures first, then a
-latency/hang primitive, then RAG providers, then the eBPF/shim subprocess
-track):
+latency/hang primitive, then the eBPF/shim subprocess track):
 
 | Scenario | Mechanism | What it will test |
 |---|---|---|
 | `llm-slow-first-token` | proxy | 8–15s before the first streamed token |
 | `gateway-timeout` | proxy | LiteLLM / Portkey / gateway returns slow or hangs |
-| `rag-stale-results` | proxy | Vector DB returns stale or deleted-document results |
 | `mcp-tool-schema-mismatch` | proxy | MCP result doesn't match its declared schema |
 | `subagent-timeout` | proxy | A subagent tool call never returns |
 | `memory-write-failure` | proxy / eBPF | Agent state write silently fails; next step reads stale |

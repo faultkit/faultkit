@@ -2,11 +2,11 @@ package proxy
 
 import "strings"
 
-// provider describes an LLM API that faultkit can intercept in base-URL
-// mode. Where the forward-proxy path relies on the target honoring
-// HTTPS_PROXY, base-URL mode points the client's SDK directly at faultkit
-// via a provider-specific base-URL environment variable. Each provider
-// records:
+// provider describes an API that faultkit can intercept. Every provider is
+// interceptable via the forward proxy, which relies on the target honoring
+// HTTPS_PROXY; a provider with baseURLEnv set can also be intercepted in
+// base-URL mode, which points the client's SDK directly at faultkit via a
+// provider-specific base-URL environment variable. Each provider records:
 //
 //   - upstream:   the real API host faultkit fronts and forwards to. For a
 //     forward-proxy-only provider it may be a host glob
@@ -31,7 +31,8 @@ type provider struct {
 	apiBase    string
 }
 
-// providerRegistry is the set of providers base-URL mode understands.
+// providerRegistry is the set of providers faultkit knows: all of them via
+// the forward proxy, and in base-URL mode those with baseURLEnv set.
 // Ordered for deterministic iteration.
 var providerRegistry = []provider{
 	{
@@ -53,6 +54,19 @@ var providerRegistry = []provider{
 		upstream: "bedrock-runtime.*.amazonaws.com", // host glob: match/attribution only
 		// baseURLEnv intentionally empty — Bedrock is forward-proxy only
 		// (SigV4 breaks base-URL origin rewrite).
+	},
+	// Vector databases. Forward-proxy only: baseURLEnv is intentionally
+	// empty because faultkit knows no SDK-honored base-URL env var for
+	// them — the application configures the per-index (Pinecone) or
+	// per-cluster (Qdrant) host itself. Only the REST APIs are faulted;
+	// gRPC needs HTTP/2, which the MITM proxy doesn't speak.
+	{
+		id:       "pinecone",
+		upstream: "*.pinecone.io", // index hosts: <index>-<project>.svc.<env>.pinecone.io
+	},
+	{
+		id:       "qdrant",
+		upstream: "*.cloud.qdrant.io", // Qdrant Cloud clusters: <id>.<region>.<cloud>.cloud.qdrant.io
 	},
 }
 
