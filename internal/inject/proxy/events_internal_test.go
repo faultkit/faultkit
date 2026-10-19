@@ -3,8 +3,10 @@ package proxy
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -256,9 +258,62 @@ func TestStreamCutoffUpstreamClosedAfterStop(t *testing.T) {
 				t.Fatal("stream-cutoff goroutine did not finish after the upstream closed")
 			}
 
-			got := drainEvents(t, inj.Events())
-			if len(got) != 1 || got[0].Err != "" {
-				t.Errorf("events = %+v, want only the fired event emitted before Stop", got)
+			// The stream was never cut, so nothing fired before Stop, and the
+			// late error event is dropped.
+			if got := drainEvents(t, inj.Events()); len(got) != 0 {
+				t.Errorf("events = %+v, want none", got)
+			}
+		})
+	}
+}
+
+// Non-fired diagnostics may fill at most half the event buffer, so a real
+// cut after a flood of them is still recorded and the run counts as fired.
+func TestDiagnosticsLeaveRoomForFiredEvent(t *testing.T) {
+	cases := []struct {
+		name    string
+		baseURL bool
+		wrap    func(*testing.T, *Injector, *http.Response)
+	}{
+		{name: "forward-proxy", wrap: wrapViaFaulter},
+		{name: "base-url", baseURL: true, wrap: wrapViaOrigin},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			const cutAt = 3
+			inj := startSealTestInjector(t, sealTestScenario(faulttypes.Fault{StreamCutoffTokens: cutAt}), tc.baseURL)
+			req, exp := newSealTestRequest(), sealTestExperiment()
+			for range eventBuffer + 10 {
+				inj.faulter.emitErr(req, exp, sealTestHost, errReadOnClosedBody)
+			}
+
+			res := &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{sseContentType}},
+				Body:       io.NopCloser(strings.NewReader(openAIDeltas(cutAt))),
+				Request:    newSealTestRequest(),
+			}
+			tc.wrap(t, inj, res)
+			if _, err := io.ReadAll(res.Body); err != nil {
+				t.Fatalf("ReadAll: %v", err)
+			}
+			if err := inj.Stop(context.Background()); err != nil {
+				t.Fatalf("Stop: %v", err)
+			}
+
+			var fired, diagnostics int
+			for _, ev := range drainEvents(t, inj.Events()) {
+				if ev.Fired {
+					fired++
+				} else {
+					diagnostics++
+				}
+			}
+			if fired != 1 {
+				t.Errorf("fired events = %d, want the cut's 1 despite the diagnostics", fired)
+			}
+			if diagnostics != eventBuffer/2 {
+				t.Errorf("diagnostics kept = %d, want half the buffer (%d)", diagnostics, eventBuffer/2)
 			}
 		})
 	}

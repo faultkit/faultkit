@@ -302,6 +302,16 @@ N content deltas (≈ tokens); lifecycle events like `message_start`
 don't count toward the budget. The connection then closes without
 sending the terminator.
 
+The fault fires only when faultkit actually cuts a stream, that is, when
+an SSE response reaches N content deltas (80 in the built-in scenario). A
+non-streaming response, or a stream that ends with fewer than N deltas,
+reaches the target unchanged and doesn't count as fired. If no stream in
+the run gets that far, the run proves nothing: the verdict is
+`invalid_evidence`, and faultkit exits `3` unless the target itself failed.
+Make sure the test asks for a reply longer than N deltas. In forward-proxy
+mode the proxy buffers its writes to the client, so a client that
+disconnects mid-stream can still be counted as fired.
+
 **What it tests:**
 
 - Streaming completion detection (do you wait for `[DONE]` or just for "no more bytes"?)

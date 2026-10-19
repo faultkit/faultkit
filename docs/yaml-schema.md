@@ -109,6 +109,16 @@ fault:
 A fault is HTTP-level if any of `http_status`, `response_headers`,
 `response_body`, or `stream_cutoff_tokens` is set.
 
+A `stream_cutoff_tokens` fault counts as fired only when faultkit cuts a
+stream: the response is SSE (`Content-Type: text/event-stream`) and reaches
+N content deltas. A non-SSE response, or a stream that ends with fewer than
+N deltas, passes through unchanged and adds no event. A line longer than
+1 MiB also passes through, but doesn't count as a delta. If the upstream
+read fails before the cut point, the report records an event with
+`fired: false` and the error in `err`. That event doesn't count as fired.
+In forward-proxy mode the proxy buffers its writes to the client, so a
+client that disconnects mid-stream can still be counted as fired.
+
 ### Syscall-level fault (eBPF mode)
 
 ```yaml

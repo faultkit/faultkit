@@ -15,7 +15,8 @@ import (
 // Event reports a fault decision made during a run. Injectors emit one
 // Event per matched-and-evaluated experiment occurrence (a request in
 // proxy mode, a syscall in eBPF mode). Fired distinguishes "the fault
-// actually applied" from "we matched but the dice roll didn't fire".
+// actually applied" from "we matched but the dice roll didn't fire" or
+// "an error stopped the fault from being applied" (then Err says why).
 type Event struct {
 	Experiment string           `json:"experiment"`
 	Fault      faulttypes.Fault `json:"fault"`
