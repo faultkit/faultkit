@@ -42,6 +42,10 @@ can also prove that it fails safely. In Claude Code:
 /plugin install faultkit@faultkit
 ```
 
+The skill runs the faultkit you have installed, 0.1.3 or later (see
+[Install](#install)), and never downloads or builds it. If faultkit isn't
+installed, proving stops and prints the install commands.
+
 | Command | What it does |
 |---|---|
 | `/faultkit:values` | Writes `.faultkit/values.md` from your words: the business value and the outcomes that must never happen. Review, `/faultkit:prove-all`, and CI then report which outcomes are covered. |
@@ -466,14 +470,18 @@ steps:
 In a monorepo, set `working-directory` to the project's directory. The other
 inputs are in the [action's README](https://github.com/faultkit/action#inputs).
 
-In other CI systems, one step replays the same proofs. It exits 0 only when
-every invariant was proven under fault:
+In other CI systems, two steps replay the same proofs: install faultkit,
+then run the skill's helper. The helper is a single standard-library Python
+file; it uses the faultkit it is given and never downloads one. It exits 0
+only when every invariant was proven under fault:
 
 ```yaml
 - name: Prove invariants
   run: |
-    curl -fsSLo run_faultkit.py https://raw.githubusercontent.com/faultkit/skills/b6e3b40eac4dd55585aeeaf65f9a17344584f7ba/faultkit/scripts/run_faultkit.py
-    python3 run_faultkit.py --manifest .faultkit/invariants/manifest.json
+    # The helper never installs faultkit; this pinned install is verified by the Go checksum database.
+    go install github.com/faultkit/faultkit/cmd/faultkit@v0.1.3
+    curl -fsSLo run_faultkit.py https://raw.githubusercontent.com/faultkit/skills/252072f13f125fcc9390f671820c849328eb7538/faultkit/scripts/run_faultkit.py
+    python3 run_faultkit.py --faultkit-bin "$(go env GOPATH)/bin/faultkit" --manifest .faultkit/invariants/manifest.json
 ```
 
 More CI recipes: [examples/](./examples/).
