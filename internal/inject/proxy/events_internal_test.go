@@ -208,7 +208,7 @@ func wrapViaOrigin(t *testing.T, inj *Injector, res *http.Response) {
 	if !ok {
 		t.Fatal("openai base-URL prefix not routed")
 	}
-	exp := inj.faulter.DecideHostPath(p.upstream, rest)
+	exp := inj.faulter.DecideHostPath(res.Request.Method, p.upstream, rest)
 	if exp == nil {
 		t.Fatal("stream-cutoff experiment did not fire")
 	}

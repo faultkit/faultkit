@@ -2,14 +2,15 @@ package proxy
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/faultkit/faultkit/pkg/scenario"
 )
 
 // Matcher selects an experiment for an HTTP request based on host and
-// path globs. Experiments are evaluated in YAML order; the first match
-// wins. Syscall-only experiments are dropped at construction time —
-// they don't apply to proxy traffic.
+// path globs and an optional method. Experiments are evaluated in YAML
+// order; the first match wins. Syscall-only experiments are dropped at
+// construction time — they don't apply to proxy traffic.
 type Matcher struct {
 	experiments []scenario.Experiment
 }
@@ -41,14 +42,14 @@ func (m *Matcher) Match(req *http.Request) *scenario.Experiment {
 	if req.URL != nil {
 		path = req.URL.Path
 	}
-	return m.matchHostPath(hostFromRequest(req), path)
+	return m.matchHostPath(req.Method, hostFromRequest(req), path)
 }
 
-// matchHostPath returns the first experiment matching host and path. The
-// host is normalized here, so callers may pass it raw (forward proxy, via
-// Match) or already-resolved (base-URL/origin mode, which knows the
-// upstream host directly and need not smuggle it through a request).
-func (m *Matcher) matchHostPath(host, path string) *scenario.Experiment {
+// matchHostPath returns the first experiment matching method, host and
+// path. The host is normalized here, so callers may pass it raw (forward
+// proxy, via Match) or already-resolved (base-URL/origin mode, which knows
+// the upstream host directly and need not smuggle it through a request).
+func (m *Matcher) matchHostPath(method, host, path string) *scenario.Experiment {
 	if m == nil {
 		return nil
 	}
@@ -59,6 +60,9 @@ func (m *Matcher) matchHostPath(host, path string) *scenario.Experiment {
 			continue
 		}
 		if exp.Match.Path != "" && !globMatch(exp.Match.Path, path) {
+			continue
+		}
+		if exp.Match.Method != "" && !strings.EqualFold(exp.Match.Method, method) {
 			continue
 		}
 		return exp

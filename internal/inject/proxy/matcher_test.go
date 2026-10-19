@@ -90,3 +90,79 @@ func TestMatcherEmpty(t *testing.T) {
 		t.Errorf("no experiments should match nothing, got %v", got)
 	}
 }
+
+// A method narrows a host/path match, case-insensitively. A request whose
+// method doesn't fit falls through to later experiments; a match without a
+// method fits every method, as before.
+func TestMatcherMethod(t *testing.T) {
+	s := &scenario.Scenario{
+		Name: "matcher-method",
+		Experiments: []scenario.Experiment{
+			{
+				Name:        "store-post",
+				Fault:       faulttypes.Fault{HTTPStatus: 200},
+				Match:       scenario.Match{Host: "store.test", Path: "/v1/memories*", Method: "POST"},
+				Probability: 1,
+			},
+			{
+				Name:        "store-patch",
+				Fault:       faulttypes.Fault{HTTPStatus: 200},
+				Match:       scenario.Match{Host: "store.test", Path: "/v1/memories*", Method: "patch"},
+				Probability: 1,
+			},
+			{
+				Name:        "fall-delete",
+				Fault:       faulttypes.Fault{HTTPStatus: 500},
+				Match:       scenario.Match{Host: "fall.test", Method: "DELETE"},
+				Probability: 1,
+			},
+			{
+				Name:        "fall-any",
+				Fault:       faulttypes.Fault{HTTPStatus: 503},
+				Match:       scenario.Match{Host: "fall.test"},
+				Probability: 1,
+			},
+			{
+				Name:        "any-method",
+				Fault:       faulttypes.Fault{HTTPStatus: 503},
+				Match:       scenario.Match{Host: "any.test"},
+				Probability: 1,
+			},
+		},
+	}
+	m := proxy.NewMatcher(s)
+
+	cases := []struct {
+		method  string
+		url     string
+		wantExp string
+	}{
+		{http.MethodPost, "https://store.test/v1/memories", "store-post"},
+		{"post", "https://store.test/v1/memories", "store-post"},
+		{http.MethodPatch, "https://store.test/v1/memories/42", "store-patch"},
+		{http.MethodGet, "https://store.test/v1/memories", ""},
+		{http.MethodPut, "https://store.test/v1/memories/42", ""},
+		{http.MethodPost, "https://store.test/health", ""},
+		{http.MethodDelete, "https://fall.test/x", "fall-delete"},
+		{http.MethodGet, "https://fall.test/x", "fall-any"},
+		{http.MethodGet, "https://any.test/x", "any-method"},
+		{http.MethodPost, "https://any.test/x", "any-method"},
+		{http.MethodDelete, "https://any.test/x", "any-method"},
+	}
+	for _, c := range cases {
+		t.Run(c.method+" "+c.url, func(t *testing.T) {
+			req := mustReq(t, c.url)
+			req.Method = c.method
+			exp := m.Match(req)
+			if c.wantExp == "" {
+				if exp != nil {
+					t.Errorf("got %q, want nil", exp.Name)
+				}
+				return
+			}
+			if exp == nil || exp.Name != c.wantExp {
+				t.Errorf("got %v, want %q", exp, c.wantExp)
+			}
+		})
+	}
+}

@@ -75,7 +75,7 @@ func (h *originHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// The upstream host is known from the provider, so match on it directly
 	// instead of mutating the request to fool the matcher.
-	exp := h.faulter.DecideHostPath(p.upstream, rest)
+	exp := h.faulter.DecideHostPath(r.Method, p.upstream, rest)
 
 	// A delay holds the request before anything else. If Stop or the client
 	// cuts it short, drop the connection: nothing is written and nothing is

@@ -8,7 +8,9 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/faultkit/faultkit/internal/inject"
@@ -210,5 +212,56 @@ func TestOriginStreamingCutoffFiresOnlyWhenCut(t *testing.T) {
 				t.Errorf("fired events = %d, error events = %d; want %d and %d", fired, errs, tc.wantFired, tc.wantErrs)
 			}
 		})
+	}
+}
+
+// Base-URL mode honours match.method: a POST the method matches gets the
+// synthetic fault without an upstream round trip, while a GET under the same
+// host and path glob is forwarded to the upstream untouched.
+func TestOriginMatchMethod(t *testing.T) {
+	const upstreamBody = `{"object":"list","data":[]}`
+	s := &scenario.Scenario{
+		Name: "origin-method",
+		Experiments: []scenario.Experiment{{
+			Name:        "openai-post-429",
+			Fault:       faulttypes.Fault{HTTPStatus: 429},
+			Match:       scenario.Match{Host: "api.openai.com", Path: "/v1/*", Method: "post"},
+			Probability: 1,
+		}},
+	}
+	h, events := newOriginTestHandler(t, s)
+	var (
+		mu      sync.Mutex
+		reached []string
+	)
+	routeToLocalUpstream(t, h, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		reached = append(reached, r.Method+" "+r.URL.Path)
+		mu.Unlock()
+		_, _ = io.WriteString(w, upstreamBody)
+	}))
+
+	get := httptest.NewRecorder()
+	h.ServeHTTP(get, httptest.NewRequest(http.MethodGet, "/__fk/openai/v1/models", nil))
+	if get.Code != http.StatusOK || get.Body.String() != upstreamBody || get.Header().Get(syntheticHeader) != "" {
+		t.Errorf("GET: got %d %q (synthetic %q), want the upstream's 200 %q", get.Code, get.Body.String(), get.Header().Get(syntheticHeader), upstreamBody)
+	}
+
+	post := httptest.NewRecorder()
+	h.ServeHTTP(post, httptest.NewRequest(http.MethodPost, "/__fk/openai/v1/chat/completions", strings.NewReader(`{"model":"x"}`)))
+	if post.Code != http.StatusTooManyRequests || post.Header().Get(syntheticHeader) != "true" {
+		t.Errorf("POST: got %d (synthetic %q), want a synthetic 429", post.Code, post.Header().Get(syntheticHeader))
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if want := []string{"GET /v1/models"}; !slices.Equal(reached, want) {
+		t.Errorf("upstream saw %v, want only %v", reached, want)
+	}
+	if len(events) != 1 {
+		t.Fatalf("got %d events, want 1 (the POST)", len(events))
+	}
+	if ev := <-events; !ev.Fired || ev.Experiment != "openai-post-429" {
+		t.Errorf("event = %+v, want the POST's fired event", ev)
 	}
 }

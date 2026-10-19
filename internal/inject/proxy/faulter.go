@@ -83,11 +83,11 @@ func (f *Faulter) Decide(req *http.Request) *scenario.Experiment {
 	return f.roll(f.matcher.Match(req))
 }
 
-// DecideHostPath is Decide for callers that resolve the host and path
-// themselves (base-URL/origin mode) rather than reading them from a
+// DecideHostPath is Decide for callers that resolve the method, host and
+// path themselves (base-URL/origin mode) rather than reading them from a
 // request. Same matching and dice roll.
-func (f *Faulter) DecideHostPath(host, path string) *scenario.Experiment {
-	return f.roll(f.matcher.matchHostPath(host, path))
+func (f *Faulter) DecideHostPath(method, host, path string) *scenario.Experiment {
+	return f.roll(f.matcher.matchHostPath(method, host, path))
 }
 
 // roll applies the probability dice to a matched experiment, returning it

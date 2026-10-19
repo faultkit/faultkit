@@ -2,9 +2,9 @@
 
 The schema for `--config <file>.yaml` and the embedded builtin
 scenarios. The v0.1 schema is stable; the `failure` and `provider`
-experiment fields and the `delay_ms` and `delay_jitter_ms` fault fields
-were added **additively**, so every existing scenario keeps loading
-unchanged.
+experiment fields, `match.method`, and the `delay_ms` and
+`delay_jitter_ms` fault fields were added **additively**, so every existing
+scenario keeps loading unchanged.
 
 ---
 
@@ -198,12 +198,14 @@ both.
 match:
   host: api.openai.com         # glob: * matches any chars including /
   path: /v1/*                  # glob: * matches any chars including /
+  method: POST                 # optional: only requests with this method
 ```
 
 | Field | Type | Notes |
 |---|---|---|
 | `host` | string | Glob against the request's host (no port). `*` matches any run of characters; `?` matches a single character. The request host is lowercased before matching, so write your pattern in lowercase. Required in practice: a match with only `path` passes validation but never fires. |
 | `path` | string | Glob against the request URL path. Same wildcard semantics as `host`. Optional — absence means "match any path on this host". |
+| `method` | string | Optional. One of `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`, in any case. Only requests with that method match; absence means any method. It narrows a `host`/`path` match and selects nothing on its own, so set it alongside `host`. A request whose method doesn't match moves on to the next experiment, so one experiment per method can share a host and path. |
 
 ### Syscall match (eBPF mode)
 
@@ -228,8 +230,9 @@ fail:
 - An experiment sets both a `failure` mode and a raw `fault`/`match`.
 - `provider` is set without a `failure` mode.
 - `fault` mixes HTTP-level and syscall-level fields.
-- `match` mixes HTTP-level (`host`/`path`) and syscall-level (`syscall`) fields.
-- `match` is empty.
+- `match` mixes HTTP-level (`host`/`path`/`method`) and syscall-level (`syscall`) fields.
+- `match` is empty. A `method` on its own counts as empty.
+- `match.method` is not one of `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`.
 - `fault` and `match` disagree on level (e.g. HTTP fault with syscall match). The delay fields have no level, so they never cause this.
 - `delay_ms` or `delay_jitter_ms` is negative, `delay_jitter_ms` is set without `delay_ms`, or `delay_ms + delay_jitter_ms` exceeds `300000`.
 

@@ -6,6 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/faultkit/faultkit/pkg/faulttypes"
 )
@@ -47,10 +50,14 @@ var (
 	ErrProviderNeedsFailure = errors.New("provider is set without a failure mode")
 )
 
-// Match describes which traffic an Experiment applies to.
+// Match describes which traffic an Experiment applies to. Method narrows
+// an HTTP match to one request method, compared case-insensitively; empty
+// matches every method. It is not an HTTP-level field on its own, so a
+// match that sets only Method is empty.
 type Match struct {
 	Host    string `yaml:"host,omitempty"`
 	Path    string `yaml:"path,omitempty"`
+	Method  string `yaml:"method,omitempty"`
 	Syscall string `yaml:"syscall,omitempty"`
 }
 
@@ -63,13 +70,34 @@ var (
 )
 
 func (m Match) Validate() error {
-	if m.IsHTTP() && m.IsSyscall() {
+	if (m.IsHTTP() || m.Method != "") && m.IsSyscall() {
 		return ErrMatchMixed
 	}
 	if !m.IsHTTP() && !m.IsSyscall() {
 		return ErrMatchEmpty
 	}
+	if m.Method != "" && !isMatchMethod(m.Method) {
+		return fmt.Errorf("match method %q is not one of %s", m.Method, strings.Join(matchMethods, ", "))
+	}
 	return nil
+}
+
+// matchMethods lists the methods a match may name. CONNECT is left out
+// because the proxy never faults the tunnel it opens, and TRACE because it
+// isn't API traffic.
+var matchMethods = []string{"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}
+
+// isMatchMethod reports whether method is one of matchMethods in any case.
+// It compares with strings.EqualFold, as the proxy matcher does, after
+// rejecting non-ASCII: a method is an ASCII token, and Unicode folding
+// would otherwise accept look-alikes such as "poſt" (ſ folds to s).
+func isMatchMethod(method string) bool {
+	for i := range len(method) {
+		if method[i] >= utf8.RuneSelf {
+			return false
+		}
+	}
+	return slices.ContainsFunc(matchMethods, func(m string) bool { return strings.EqualFold(m, method) })
 }
 
 // Requires expresses platform-level prerequisites for a Scenario.
@@ -101,6 +129,11 @@ func (s *Scenario) Validate() error {
 			// Any set fault field counts, including level-neutral ones
 			// like delay_ms; Fault holds a map, so compare via reflect.
 			if !reflect.ValueOf(exp.Fault).IsZero() || exp.Match.IsHTTP() || exp.Match.IsSyscall() {
+				return fmt.Errorf("scenario %q experiment %q: %w", s.Name, exp.Name, ErrExperimentMixed)
+			}
+			// Method isn't an HTTP-level field (it only narrows host/path),
+			// so the check above misses it; the fixture's match would drop it.
+			if exp.Match.Method != "" {
 				return fmt.Errorf("scenario %q experiment %q: %w", s.Name, exp.Name, ErrExperimentMixed)
 			}
 			continue
