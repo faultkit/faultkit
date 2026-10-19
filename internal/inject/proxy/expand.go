@@ -92,5 +92,7 @@ func fixtureFault(f fixtures.Fixture) faulttypes.Fault {
 		ResponseHeaders:    f.Headers,
 		ResponseBody:       f.Body,
 		StreamCutoffTokens: f.StreamCutoffTokens,
+		DelayMS:            f.DelayMS,
+		DelayJitterMS:      f.DelayJitterMS,
 	}
 }

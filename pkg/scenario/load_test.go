@@ -2,6 +2,7 @@ package scenario_test
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -142,5 +143,77 @@ func TestLoadBytesInvalid(t *testing.T) {
 				t.Fatalf("err %q does not contain %q", err.Error(), c.wantSubstr)
 			}
 		})
+	}
+}
+
+// delayYAML is a one-experiment raw scenario with the given flow-style
+// fault and match.
+func delayYAML(fault, match string) string {
+	return fmt.Sprintf("name: delay\nexperiments:\n  - name: x\n    fault: %s\n    match: %s\n    probability: 1\n", fault, match)
+}
+
+// delay_ms and delay_jitter_ms are level-neutral: a delay pairs with an
+// HTTP or a syscall match, and only the HTTP and syscall fields must agree
+// with the match. A fixture-driven experiment still takes no fault fields.
+func TestValidateDelay(t *testing.T) {
+	const (
+		httpMatch    = "{host: api.openai.com}"
+		syscallMatch = "{syscall: write}"
+		levelErr     = "must both be HTTP-level or both syscall-level"
+	)
+	cases := []struct {
+		name         string
+		yaml         string
+		wantSentinel error
+		wantSubstr   string
+	}{
+		{name: "delay only with an http match", yaml: delayYAML("{delay_ms: 8000, delay_jitter_ms: 7000}", httpMatch)},
+		{name: "delay only with a syscall match", yaml: delayYAML("{delay_ms: 500}", syscallMatch)},
+		{name: "delay and status with an http match", yaml: delayYAML("{delay_ms: 500, http_status: 503}", httpMatch)},
+		{name: "delay and stream cutoff with an http match", yaml: delayYAML("{delay_ms: 500, stream_cutoff_tokens: 80}", httpMatch)},
+		{name: "delay and errno with a syscall match", yaml: delayYAML("{delay_ms: 500, errno: EIO}", syscallMatch)},
+		{name: "delay and status with a syscall match", yaml: delayYAML("{delay_ms: 500, http_status: 503}", syscallMatch), wantSubstr: levelErr},
+		{name: "delay and errno with an http match", yaml: delayYAML("{delay_ms: 500, errno: EIO}", httpMatch), wantSubstr: levelErr},
+		{name: "jitter without delay", yaml: delayYAML("{delay_jitter_ms: 100}", httpMatch), wantSubstr: "delay_jitter_ms requires delay_ms"},
+		{name: "negative delay", yaml: delayYAML("{delay_ms: -1}", httpMatch), wantSubstr: "must be non-negative"},
+		{name: "negative jitter", yaml: delayYAML("{delay_ms: 500, delay_jitter_ms: -1}", httpMatch), wantSubstr: "must be non-negative"},
+		{name: "delay over the cap", yaml: delayYAML("{delay_ms: 290000, delay_jitter_ms: 10001}", httpMatch), wantSubstr: "must not exceed 300000"},
+		{
+			name:         "failure mode with a delay",
+			yaml:         "name: bad\nexperiments:\n  - name: x\n    failure: slow-first-token\n    fault: {delay_ms: 500}\n    probability: 0.1\n",
+			wantSentinel: scenario.ErrExperimentMixed,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := scenario.LoadBytes([]byte(c.yaml))
+			wantErr := c.wantSentinel != nil || c.wantSubstr != ""
+			if !wantErr {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("got nil, want error")
+			}
+			if c.wantSentinel != nil && !errors.Is(err, c.wantSentinel) {
+				t.Fatalf("err %v not wrapping %v", err, c.wantSentinel)
+			}
+			if c.wantSubstr != "" && !strings.Contains(err.Error(), c.wantSubstr) {
+				t.Fatalf("err %q does not contain %q", err.Error(), c.wantSubstr)
+			}
+		})
+	}
+}
+
+// The YAML keys reach the Fault fields.
+func TestLoadBytesDelayFields(t *testing.T) {
+	s, err := scenario.LoadBytes([]byte(delayYAML("{delay_ms: 8000, delay_jitter_ms: 7000}", "{host: api.openai.com}")))
+	if err != nil {
+		t.Fatalf("LoadBytes: %v", err)
+	}
+	if got := s.Experiments[0].Fault; got.DelayMS != 8000 || got.DelayJitterMS != 7000 {
+		t.Errorf("DelayMS, DelayJitterMS = %d, %d; want 8000, 7000", got.DelayMS, got.DelayJitterMS)
 	}
 }

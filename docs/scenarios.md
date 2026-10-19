@@ -30,6 +30,7 @@ Narrow with `--provider` (see [Failure modes and providers](#failure-modes-and-p
 | `llm-streaming-cutoff` | proxy | Streaming response drops mid-token |
 | `llm-empty-response` | proxy | 200 with no content (`null` / empty content array) |
 | `context-window-overflow` | proxy | Provider rejects the prompt as over the context window (HTTP 400) |
+| `llm-slow-first-token` | proxy | Response starts 8–15s late (streamed or not) |
 
 **Anthropic-specific** — failures Claude surfaces with no OpenAI equivalent:
 
@@ -353,6 +354,87 @@ The frontend shows the partial response as if it's complete and
 commits it to the conversation history. The next turn's context now
 contains a truncated assistant message, and the agent compounds the
 error.
+
+---
+
+### `llm-slow-first-token`
+
+The provider accepts the request and then takes 8–15 seconds to start
+answering. Does your application wait, time out, retry, or tell the user
+what's happening?
+
+In production this happens when: the provider is queueing requests under
+load, a large prompt takes long to prefill, a cold model replica spins up,
+or a gateway in between is slow.
+
+faultkit holds each matched request for 8 s plus a random 0–7 s, then
+forwards it unchanged to the real provider. The reply itself is the
+provider's own, so a streamed response streams normally once it starts,
+and a non-streamed one arrives whole; only its start is late. The fault
+applies to OpenAI `/v1/chat/completions`, Anthropic `/v1/messages`, and
+Bedrock `/model/*` (forward-proxy mode only, like every Bedrock fixture).
+Each delayed request counts as one fired fault, when its delay starts,
+even if the client gave up or the run ended before the delay ran out.
+
+The run ending (the target exiting) cuts every pending delay short and
+drops those connections without forwarding them. faultkit doesn't notice
+a client that gives up during the delay of a `POST`, though: if the run
+is still going when the delay runs out, the request is still sent to the
+provider, so it can be a billed call. See
+[the delay fields](./yaml-schema.md#delay-level-neutral) for the full
+semantics.
+
+**What it tests:**
+
+- Client timeouts (is there one, and is it longer than a slow-but-healthy
+  reply?)
+- Retry on timeout (does a retry duplicate a request the provider is
+  still answering?)
+- User feedback while waiting (spinner, "still working" message)
+- Overall deadlines in agent loops that make several LLM calls
+
+**YAML:**
+
+```yaml
+name: llm-slow-first-token
+description: LLM requests are held 8–15s before they reach the provider.
+experiments:
+  - name: slow-first-token
+    failure: slow-first-token
+    probability: 0.2
+```
+
+The equivalent raw experiment for one provider:
+
+```yaml
+experiments:
+  - name: "openai slow first token"
+    fault:
+      delay_ms: 8000
+      delay_jitter_ms: 7000
+    match:
+      host: "api.openai.com"
+      path: "/v1/chat/completions"
+    probability: 0.2
+```
+
+**Run it:**
+
+```bash
+faultkit run --scenario llm-slow-first-token -- pytest tests/
+```
+
+**What good behavior looks like:**
+
+Your application waits within a deliberate timeout, shows progress, and
+if it gives up, it does so cleanly: one retry at most, no duplicated side
+effects, and an honest message to the user.
+
+**What bad behavior looks like:**
+
+A default timeout nobody chose fires first, the agent retries in a tight
+loop and multiplies the load, or a request handler upstream of the agent
+times out while the LLM call carries on and its result is thrown away.
 
 ---
 
@@ -774,7 +856,6 @@ latency/hang primitive, then the eBPF/shim subprocess track):
 
 | Scenario | Mechanism | What it will test |
 |---|---|---|
-| `llm-slow-first-token` | proxy | 8–15s before the first streamed token |
 | `gateway-timeout` | proxy | LiteLLM / Portkey / gateway returns slow or hangs |
 | `mcp-tool-schema-mismatch` | proxy | MCP result doesn't match its declared schema |
 | `subagent-timeout` | proxy | A subagent tool call never returns |

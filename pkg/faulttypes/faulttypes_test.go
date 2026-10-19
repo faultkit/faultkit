@@ -2,6 +2,7 @@ package faulttypes_test
 
 import (
 	"errors"
+	"math"
 	"testing"
 
 	"github.com/faultkit/faultkit/pkg/faulttypes"
@@ -25,6 +26,21 @@ func TestFaultValidate(t *testing.T) {
 		{name: "status too low", fault: faulttypes.Fault{HTTPStatus: 99}, wantAnyErr: true},
 		{name: "status too high", fault: faulttypes.Fault{HTTPStatus: 600}, wantAnyErr: true},
 		{name: "negative stream cutoff", fault: faulttypes.Fault{StreamCutoffTokens: -1}, wantAnyErr: true},
+		{name: "delay only", fault: faulttypes.Fault{DelayMS: 50}},
+		{name: "delay with jitter", fault: faulttypes.Fault{DelayMS: 50, DelayJitterMS: 20}},
+		{name: "delay with http status", fault: faulttypes.Fault{DelayMS: 50, HTTPStatus: 503}},
+		{name: "delay with stream cutoff", fault: faulttypes.Fault{DelayMS: 50, StreamCutoffTokens: 80}},
+		{name: "delay with errno", fault: faulttypes.Fault{DelayMS: 50, Errno: "EIO"}},
+		{name: "delay at the cap", fault: faulttypes.Fault{DelayMS: 200000, DelayJitterMS: 100000}},
+		{name: "delay over the cap", fault: faulttypes.Fault{DelayMS: 200000, DelayJitterMS: 100001}, wantAnyErr: true},
+		{name: "delay alone over the cap", fault: faulttypes.Fault{DelayMS: 300001}, wantAnyErr: true},
+		{name: "jitter that would overflow the sum", fault: faulttypes.Fault{DelayMS: 1, DelayJitterMS: math.MaxInt}, wantAnyErr: true},
+		{name: "jitter without delay", fault: faulttypes.Fault{DelayJitterMS: 20}, wantAnyErr: true},
+		{name: "jitter without delay on an http fault", fault: faulttypes.Fault{HTTPStatus: 503, DelayJitterMS: 20}, wantAnyErr: true},
+		{name: "negative delay", fault: faulttypes.Fault{DelayMS: -1}, wantAnyErr: true},
+		{name: "negative delay on an http fault", fault: faulttypes.Fault{HTTPStatus: 503, DelayMS: -1}, wantAnyErr: true},
+		{name: "negative jitter", fault: faulttypes.Fault{DelayMS: 50, DelayJitterMS: -1}, wantAnyErr: true},
+		{name: "delay does not hide a mix", fault: faulttypes.Fault{DelayMS: 50, HTTPStatus: 429, Errno: "EIO"}, wantSentinel: faulttypes.ErrFaultMixed},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -57,6 +73,9 @@ func TestFaultIsHTTPIsSyscall(t *testing.T) {
 		{"status", faulttypes.Fault{HTTPStatus: 200}, true, false},
 		{"errno", faulttypes.Fault{Errno: "EACCES"}, false, true},
 		{"stream cutoff", faulttypes.Fault{StreamCutoffTokens: 5}, true, false},
+		{"delay only", faulttypes.Fault{DelayMS: 50, DelayJitterMS: 20}, false, false},
+		{"delay with status", faulttypes.Fault{DelayMS: 50, HTTPStatus: 503}, true, false},
+		{"delay with errno", faulttypes.Fault{DelayMS: 50, Errno: "EIO"}, false, true},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

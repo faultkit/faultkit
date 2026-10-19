@@ -23,6 +23,7 @@ func TestBuiltinsLoadable(t *testing.T) {
 		"flaky-network",
 		"llm-api-degraded",
 		"llm-empty-response",
+		"llm-slow-first-token",
 		"llm-streaming-cutoff",
 		"malformed-json-response",
 		"malformed-tool-use",

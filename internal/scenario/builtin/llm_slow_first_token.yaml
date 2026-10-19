@@ -1,0 +1,6 @@
+name: llm-slow-first-token
+description: LLM requests are held 8–15s before they reach the provider, so the response (streamed or not) starts that much later.
+experiments:
+  - name: slow-first-token
+    failure: slow-first-token
+    probability: 0.2

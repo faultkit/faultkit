@@ -195,6 +195,12 @@ func scenarioHTTPHosts(s *scenario.Scenario) []string {
 // Stop tears down the proxy and removes the CA temp file. Idempotent.
 func (i *Injector) Stop(_ context.Context) error {
 	i.stopOnce.Do(func() {
+		// Cut pending delays short first: martian's Close waits for every
+		// connection, including one held in a delay, and a cancelled delay
+		// drops its connection instead of forwarding the request.
+		if i.faulter != nil {
+			i.faulter.cancelDelays()
+		}
 		if i.server != nil {
 			if err := i.server.Stop(); err != nil {
 				i.stopErr = err
