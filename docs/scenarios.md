@@ -1114,6 +1114,9 @@ the same host and path would never fire.
 
 **Limits:**
 
+- **Needs a faultkit release newer than 0.1.3.** `delay_ms` is new; 0.1.3
+  and earlier ignore the field without a warning, so the 504 variant
+  answers at once and the slow variant forwards with no delay.
 - **Forward-proxy mode only.** `--base-url` only routes OpenAI and
   Anthropic traffic, so it can't reach a gateway host: with this recipe
   the run fails at start (exit `2`). Your app's gateway client must honor
@@ -1272,6 +1275,10 @@ and drops the connection. The sub-agent never receives the call.
 
 **Limits:**
 
+- **Needs a faultkit release newer than 0.1.3.** `delay_ms` and
+  `match.method` are new; 0.1.3 and earlier ignore both without a
+  warning, so the call gets an immediate `504` and so do the requests the
+  recipe means to let through.
 - **HTTP sub-agents only.** An MCP server over stdio, or a sub-agent
   your orchestrator runs as a subprocess, doesn't go through the proxy,
   so it isn't covered.
