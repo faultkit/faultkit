@@ -36,6 +36,7 @@ coverage.html
 # IDE / editor
 .idea/
 .vscode/
+.omp/
 *.swp
 *.swo
 *~
