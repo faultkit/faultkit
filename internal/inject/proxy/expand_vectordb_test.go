@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"context"
+	"net/http"
 	"strings"
 	"testing"
 
@@ -78,7 +79,7 @@ func TestMatcherFiresOnVectorDBHosts(t *testing.T) {
 		{"localhost:6333", "/collections/docs/points/query", false},
 	}
 	for _, c := range cases {
-		if got := m.matchHostPath(c.host, c.path) != nil; got != c.want {
+		if got := m.matchHostPath(http.MethodPost, c.host, c.path) != nil; got != c.want {
 			t.Errorf("matchHostPath(%q, %q) fired=%v, want %v", c.host, c.path, got, c.want)
 		}
 	}

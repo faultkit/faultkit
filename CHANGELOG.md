@@ -56,6 +56,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   billed, API call. eBPF mode refuses a delay on the syscall experiment it
   runs, for now. The fields are left out of the report's event JSON when
   unset, so `report/v1` output for existing scenarios is unchanged.
+- **`match.method` narrows an HTTP experiment to one request method:**
+  `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE` or `OPTIONS`, in any
+  case. Any other value fails validation (exit `4`), as does a `method` on
+  its own, next to `syscall`, or on a fixture-driven (`failure:`)
+  experiment. A request whose method doesn't match moves on to the next
+  experiment. Experiments without `method` match every method, as before,
+  and the report is unchanged.
+- **`memory-write-failure` recipe** in docs/scenarios.md. Writes (`POST`,
+  `PUT`, `PATCH`) to your memory store get a synthetic success and never
+  reach it, while reads pass through and return the old data. It works for
+  HTTP-backed stores in forward-proxy mode only, and isn't a builtin: copy
+  the YAML and run it with `--config`.
 
 ### Changed
 

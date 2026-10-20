@@ -9,7 +9,9 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/faultkit/faultkit/internal/inject"
@@ -315,5 +317,95 @@ func TestE2E_PassthroughWhenProbabilityZero(t *testing.T) {
 	}
 	if resp.Header.Get("X-Faultkit-Synthetic") != "" {
 		t.Error("X-Faultkit-Synthetic should not be set on passthrough")
+	}
+}
+
+// memory-write-failure, as the docs recipe writes it: writes matched by
+// method get a synthetic 200 and never reach the store, while reads (and
+// methods no experiment names) pass through to the real upstream.
+func TestE2E_MatchMethodSkipsWritesPassesReads(t *testing.T) {
+	const (
+		ack    = `{"id":"mem_1","status":"ok"}`
+		stored = `{"id":"mem_1","memory":"old value"}`
+	)
+	write := func(name, method string) scenario.Experiment {
+		return scenario.Experiment{
+			Name:        name,
+			Fault:       faulttypes.Fault{HTTPStatus: 200, ResponseBody: ack},
+			Match:       scenario.Match{Host: "127.0.0.1", Path: "/v1/memories*", Method: method},
+			Probability: 1.0,
+		}
+	}
+	s := &scenario.Scenario{
+		Name: "test-memory-write-failure",
+		Experiments: []scenario.Experiment{
+			write("post-dropped", "POST"),
+			write("put-dropped", "put"),
+			write("patch-dropped", "Patch"),
+		},
+	}
+	var (
+		mu      sync.Mutex
+		reached []string
+	)
+	inj, upstream, client := e2eInjector(t, s, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		reached = append(reached, r.Method)
+		mu.Unlock()
+		_, _ = w.Write([]byte(stored))
+	}))
+
+	cases := []struct {
+		method    string
+		path      string
+		wantBody  string
+		synthetic bool
+	}{
+		{http.MethodPost, "/v1/memories", ack, true},
+		{http.MethodPut, "/v1/memories/mem_1", ack, true},
+		{http.MethodPatch, "/v1/memories/mem_1", ack, true},
+		{http.MethodGet, "/v1/memories/mem_1", stored, false},
+		{http.MethodDelete, "/v1/memories/mem_1", stored, false},
+	}
+	for _, c := range cases {
+		req, err := http.NewRequest(c.method, upstream.URL+c.path, strings.NewReader(`{"memory":"new value"}`))
+		if err != nil {
+			t.Fatalf("NewRequest: %v", err)
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("%s %s: %v", c.method, c.path, err)
+		}
+		body, err := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if err != nil {
+			t.Fatalf("%s %s: read body: %v", c.method, c.path, err)
+		}
+		if resp.StatusCode != http.StatusOK || string(body) != c.wantBody {
+			t.Errorf("%s %s: got %d %q, want 200 %q", c.method, c.path, resp.StatusCode, body, c.wantBody)
+		}
+		if got := resp.Header.Get("X-Faultkit-Synthetic") == "true"; got != c.synthetic {
+			t.Errorf("%s %s: synthetic = %v, want %v", c.method, c.path, got, c.synthetic)
+		}
+	}
+
+	if err := inj.Stop(context.Background()); err != nil {
+		t.Fatalf("Stop: %v", err)
+	}
+	var fired []string
+	for ev := range inj.Events() {
+		if !ev.Fired {
+			t.Errorf("unexpected event %+v", ev)
+			continue
+		}
+		fired = append(fired, ev.Experiment)
+	}
+	if want := []string{"post-dropped", "put-dropped", "patch-dropped"}; !slices.Equal(fired, want) {
+		t.Errorf("fired experiments = %v, want %v", fired, want)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if want := []string{http.MethodGet, http.MethodDelete}; !slices.Equal(reached, want) {
+		t.Errorf("upstream saw %v, want only %v", reached, want)
 	}
 }

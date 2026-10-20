@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"encoding/json"
+	"net/http"
 	"slices"
 	"testing"
 
@@ -93,7 +94,7 @@ func TestMatcherFiresOnRegionalBedrockHost(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := NewMatcher(expanded)
-	exp := m.matchHostPath("bedrock-runtime.eu-west-1.amazonaws.com", "/model/anthropic.claude-3/invoke")
+	exp := m.matchHostPath(http.MethodPost, "bedrock-runtime.eu-west-1.amazonaws.com", "/model/anthropic.claude-3/invoke")
 	if exp == nil {
 		t.Fatal("expected a match for a regional Bedrock invoke path")
 	}
@@ -169,7 +170,7 @@ func TestEmbeddingsDegradedMatchesOnlyEmbeddingCalls(t *testing.T) {
 		{"bedrock-runtime.us-east-1.amazonaws.com", "/model/anthropic.claude-3-haiku/invoke", false},
 	}
 	for _, c := range cases {
-		exp := m.matchHostPath(c.host, c.path)
+		exp := m.matchHostPath(http.MethodPost, c.host, c.path)
 		if (exp != nil) != c.want {
 			t.Errorf("%s%s: matched=%v, want %v", c.host, c.path, exp != nil, c.want)
 			continue

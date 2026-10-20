@@ -208,7 +208,7 @@ intact but base-URL mode would break, so `--base-url` doesn't target it.
 |---|---|:---:|
 | `mcp-tool-schema-mismatch` | MCP server returns a result that doesn't match its declared schema | 🛣️ |
 | `subagent-timeout` | A subagent tool call never returns — tests the orchestration ceiling | 🛣️ |
-| `memory-write-failure` | Agent state write silently fails; the next step reads stale state | 🛣️ |
+| `memory-write-failure` | An HTTP memory store acknowledges a write it never stores; the next read is stale. HTTP-backed stores and forward-proxy mode only, via a [copy-paste recipe](docs/scenarios.md#memory-write-failure) | ✅ |
 
 ### Backend classics
 

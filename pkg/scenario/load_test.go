@@ -217,3 +217,62 @@ func TestLoadBytesDelayFields(t *testing.T) {
 		t.Errorf("DelayMS, DelayJitterMS = %d, %d; want 8000, 7000", got.DelayMS, got.DelayJitterMS)
 	}
 }
+
+// methodYAML returns a one-experiment scenario with an HTTP fault and the
+// match fields in match, a flow-mapping body such as "host: a, method: POST".
+func methodYAML(match string) string {
+	return "name: m\nexperiments:\n  - name: x\n    fault: {http_status: 200}\n    match: {" + match + "}\n    probability: 1\n"
+}
+
+// match.method accepts the allowlisted methods in any case and keeps the
+// value as written; matching compares it case-insensitively.
+func TestLoadBytesMatchMethod(t *testing.T) {
+	for _, method := range []string{"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "post", "Patch"} {
+		t.Run(method, func(t *testing.T) {
+			s, err := scenario.LoadBytes([]byte(methodYAML("host: store.example.com, path: /v1/memories, method: " + method)))
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got := s.Experiments[0].Match.Method; got != method {
+				t.Errorf("Match.Method = %q, want %q", got, method)
+			}
+		})
+	}
+}
+
+func TestLoadBytesMatchMethodInvalid(t *testing.T) {
+	cases := []struct {
+		name         string
+		yaml         string
+		wantSentinel error
+		wantSubstr   string
+	}{
+		{name: "CONNECT not allowed", yaml: methodYAML("host: a, method: CONNECT"), wantSubstr: `match method "CONNECT" is not one of`},
+		{name: "TRACE not allowed", yaml: methodYAML("host: a, method: TRACE"), wantSubstr: `match method "TRACE" is not one of GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS`},
+		{name: "typo", yaml: methodYAML("host: a, method: PSOT"), wantSubstr: `match method "PSOT" is not one of`},
+		{name: "padded", yaml: methodYAML(`host: a, method: " POST"`), wantSubstr: `match method " POST" is not one of`},
+		{name: "long s folds to POST", yaml: methodYAML("host: a, method: poſt"), wantSubstr: `match method "poſt" is not one of`},
+		{name: "dotless i uppercases to OPTIONS", yaml: methodYAML("host: a, method: optıons"), wantSubstr: `match method "optıons" is not one of`},
+		{name: "method and syscall", yaml: methodYAML("method: POST, syscall: recvmsg"), wantSentinel: scenario.ErrMatchMixed},
+		{name: "method alone", yaml: methodYAML("method: POST"), wantSentinel: scenario.ErrMatchEmpty},
+		{
+			name:         "method on a fixture-driven experiment",
+			yaml:         "name: bad\nexperiments:\n  - name: x\n    failure: rate-limited\n    match: {method: POST}\n    probability: 0.1\n",
+			wantSentinel: scenario.ErrExperimentMixed,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := scenario.LoadBytes([]byte(c.yaml))
+			if err == nil {
+				t.Fatalf("got nil, want error")
+			}
+			if c.wantSentinel != nil && !errors.Is(err, c.wantSentinel) {
+				t.Fatalf("err %v not wrapping %v", err, c.wantSentinel)
+			}
+			if c.wantSubstr != "" && !strings.Contains(err.Error(), c.wantSubstr) {
+				t.Fatalf("err %q does not contain %q", err.Error(), c.wantSubstr)
+			}
+		})
+	}
+}

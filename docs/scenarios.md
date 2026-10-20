@@ -68,6 +68,13 @@ has no embeddings API), and vector queries on Pinecone and Qdrant Cloud
 All of them are free, open-source, and built into the faultkit binary.
 Run `faultkit scenario list` to see what's available on your installation.
 
+**Recipes** — copy-paste YAML for hosts only you know, run with `--config`
+(see [Recipes](#recipes)):
+
+| Scenario | Mode | What it tests |
+|---|---|---|
+| `memory-write-failure` | proxy (forward-proxy only) | A store write is acknowledged but never stored; the next read is stale |
+
 ---
 
 ## How scenarios work
@@ -809,6 +816,142 @@ loop terminates without explanation. The user sees a generic
 
 ---
 
+## Recipes
+
+Some failures only make sense against a host faultkit can't know in
+advance, such as your own memory store. These ship as recipes: copy the
+YAML into a file, point it at your host, and run it with `--config`.
+They aren't builtins, so `faultkit run --scenario` and
+`faultkit scenario list` don't know them.
+
+### `memory-write-failure`
+
+Your agent saves state between steps (a memory, a checkpoint, a
+conversation summary) to an HTTP store. The store answers the write
+with a success, but the data never lands. The next step reads the old
+value and carries on as if the write had happened.
+
+In production this happens when a write is acknowledged before it is
+durable: a replica that loses it, a read served before replication
+catches up, an async write API whose background job is dropped.
+
+The recipe uses `match.method`. Writes (`POST`, `PUT`, `PATCH`) to your
+store's path get a synthetic success and never reach the store. Reads
+(`GET`) pass through to the real store, which still holds the old data.
+
+**Limits:**
+
+- **Needs a faultkit release newer than 0.1.3.** `match.method` is new;
+  0.1.3 and earlier ignore the field without a warning, so they fault
+  every request to the host and path, reads included.
+- **HTTP-backed stores only.** The agent must reach the store through a
+  REST/HTTP API. File-based memory, database wire protocols and gRPC
+  clients aren't covered.
+- **Forward-proxy mode only.** `--base-url` only routes OpenAI and
+  Anthropic traffic, so it can't reach a store host. The store client
+  must honor `HTTPS_PROXY` and trust the CA bundle faultkit injects
+  (`SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE`, `NODE_EXTRA_CA_CERTS`, …). Some
+  clients never send loopback traffic through a proxy (Go's `net/http`
+  is one), so a store on `localhost` may never see the fault.
+- **Writes are matched by method and path, not by body.** A store API
+  that sends reads and writes as `POST` to the same path, such as a
+  Redis-over-HTTP command endpoint, can't be split this way.
+- **Lost writes only.** A dropped write never reaches the store, so
+  duplicate effects from retries aren't tested. Nor are lost
+  acknowledgements: a write that lands but whose response never arrives
+  isn't simulated.
+
+**What it tests:**
+
+- Read-your-writes checks after a store write
+- Whether the agent trusts a write acknowledgement it never verifies
+- Recovery when the state read back isn't what was written
+
+**YAML** (save as `memory-write-failure.yaml`):
+
+```yaml
+name: memory-write-failure
+description: Memory-store writes are acknowledged but never stored, so later reads are stale.
+experiments:
+  - name: "create acknowledged, not stored"
+    fault:
+      http_status: 200
+      # Replace with the body your store returns for a successful write.
+      response_body: '{"id":"mem_123","status":"ok"}'
+    match:
+      host: "memory.example.com"    # replace with your store's API host
+      path: "/v1/memories*"         # replace with your store's write path
+      method: POST
+    probability: 1.0
+  - name: "replace acknowledged, not stored"
+    fault:
+      http_status: 200
+      response_body: '{"id":"mem_123","status":"ok"}'
+    match:
+      host: "memory.example.com"
+      path: "/v1/memories*"
+      method: PUT
+    probability: 1.0
+  - name: "update acknowledged, not stored"
+    fault:
+      http_status: 200
+      response_body: '{"id":"mem_123","status":"ok"}'
+    match:
+      host: "memory.example.com"
+      path: "/v1/memories*"
+      method: PATCH
+    probability: 1.0
+```
+
+Replace the host and path with your store's; `host` is required, a match
+without it never fires. Set `response_body` to what your store returns
+for a successful write, copied from its API reference or from a real
+response, and use its status code too (often `201` for a create). If you
+leave `response_body` out, faultkit answers a 2xx write with `{}`. A
+client that reads fields from the write response (an id, a version, the
+stored record) may then fail loudly with a parse or validation error.
+That tests a different failure from a write that is silently lost.
+
+A match names one method, so the recipe has one experiment per write
+method. Delete the ones your store doesn't use. `probability: 1.0` drops
+every write, so the run is repeatable; lower it to drop only some.
+
+**Run it:**
+
+```bash
+faultkit run --config memory-write-failure.yaml -- pytest tests/agent/
+```
+
+Each dropped write is a fired event in the report. If none of the
+agent's writes reach faultkit (wrong host or path, or a client that
+bypasses the proxy), the run proves nothing: the verdict is
+`invalid_evidence`, and faultkit exits `3` unless the target itself
+failed.
+
+A fired fault with exit `0` only proves something if your test checks
+the store. When the agent reports success, the test should read the
+state back from the store with a fresh client (not the agent's
+in-process cache) and fail if it's stale. A test that only checks that
+nothing crashed passes with stale state, and the report then says
+`invariant_proven_under_fault`. At `probability: 1.0` the agent's
+retries are dropped too, so the only correct outcome is an error the
+agent surfaces: the test should expect that error, not fail on it.
+
+**What good behavior looks like:**
+
+The agent notices. It reads the record back, or checks the version the
+store returns, and reports an error when the write didn't land. If it
+retries first, the retry is dropped too at `probability: 1.0`. It never
+acts on state it believes it saved but didn't.
+
+**What bad behavior looks like:**
+
+The next step reads the old memory and acts on it: the user's updated
+preference is ignored, a finished task is done again, a summary loses
+the last turn. Nothing in the logs says a write failed.
+
+---
+
 ## Composing scenarios
 
 Multiple experiments in one scenario:
@@ -861,7 +1004,6 @@ latency/hang primitive, then the eBPF/shim subprocess track):
 | `gateway-timeout` | proxy | LiteLLM / Portkey / gateway returns slow or hangs |
 | `mcp-tool-schema-mismatch` | proxy | MCP result doesn't match its declared schema |
 | `subagent-timeout` | proxy | A subagent tool call never returns |
-| `memory-write-failure` | proxy / eBPF | Agent state write silently fails; next step reads stale |
 | `tool-call-flaky` | eBPF / shim | Truncated stdout, exit 0 — partial data, no error raised |
 | `partial-tool-result` | eBPF / shim | Valid-but-incomplete tool result, exit 0 |
 | `tool-slow` | eBPF / shim | Subprocess hangs for N seconds |
