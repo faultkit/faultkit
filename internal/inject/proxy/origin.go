@@ -49,10 +49,13 @@ func newOriginHandler(faulter *Faulter, vlog inject.Logf) *originHandler {
 				return nil
 			}
 			p, _ := res.Request.Context().Value(ctxOriginProvider).(provider)
-			wrapStreamCutoff(res, exp.Fault.StreamCutoffTokens, func(err error) {
+			// As in forward-proxy mode, the fault fires only if the stream
+			// reaches the cut point.
+			wrapStreamCutoff(res, exp.Fault.StreamCutoffTokens, func() {
+				h.faulter.emit(res.Request, exp, p.upstream)
+			}, func(err error) {
 				h.faulter.emitErr(res.Request, exp, p.upstream, err)
 			})
-			h.faulter.emit(res.Request, exp, p.upstream)
 			return nil
 		},
 	}

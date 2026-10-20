@@ -45,6 +45,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   request still in flight when the target exited, could send an event after
   the proxy closed its event channel. That crashed faultkit with a Go panic
   before it wrote the report. Such late events are now dropped.
+- **A stream-cutoff fault counts as fired only when faultkit actually cuts
+  the stream.** A `stream_cutoff_tokens` fault (the `llm-streaming-cutoff`
+  scenario, `streaming-cutoff` mode) used to count as fired as soon as its
+  experiment matched a request. That happened even when the response wasn't
+  SSE, or the stream ended before N content deltas and reached the target
+  whole. The report then showed a fired fault, and could claim
+  `invariant_proven_under_fault`, for a run where nothing was injected. The
+  fired event is now sent at the cut. An upstream read error before the cut
+  point is an event with `fired: false` and `err` set. It used to be a second
+  fired event.
+
+  **Exit codes change for runs where nothing was cut.** If no stream reached
+  N content deltas and no other fault fired, the run now exits `3`
+  (`invalid_evidence`) instead of `0` (`invariant_proven_under_fault`). If the
+  target failed, the exit code stays `1`, but the verdict is now
+  `invalid_evidence` instead of `silent_failure_confirmed`. N is unchanged:
+  80 for `llm-streaming-cutoff`.
+- **A stream-cutoff fault no longer ends a stream that has an SSE line over
+  1 MiB.** faultkit read the stream through a line scanner capped at 1 MiB.
+  A longer line, even a valid one, made faultkit end the stream there,
+  before the cut point. That line now passes through and doesn't count as a
+  content delta. The stream before the cut is also forwarded byte for byte;
+  CRLF line endings used to become LF.
+- **Error events no longer push out fired events.** Events with
+  `fired: false` now use at most half of the proxy's event buffer, so a
+  burst of them can't make faultkit drop the fired event that decides the
+  verdict.
 
 ### Build / supply chain
 

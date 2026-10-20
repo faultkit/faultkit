@@ -144,10 +144,13 @@ func (f *Faulter) ModifyResponse(res *http.Response) error {
 	host := normalizeHost(hostFromRequest(res.Request))
 
 	if exp.Fault.StreamCutoffTokens > 0 {
-		wrapStreamCutoff(res, exp.Fault.StreamCutoffTokens, func(err error) {
+		// The cut happens later, on the stream's forwarding goroutine. The
+		// fault fires only if the stream reaches the cut point.
+		wrapStreamCutoff(res, exp.Fault.StreamCutoffTokens, func() {
+			f.emit(res.Request, exp, host)
+		}, func(err error) {
 			f.emitErr(res.Request, exp, host, err)
 		})
-		f.emit(res.Request, exp, host)
 		return nil
 	}
 
@@ -190,28 +193,38 @@ func (f *Faulter) writeSyntheticResponse(w http.ResponseWriter, req *http.Reques
 }
 
 func (f *Faulter) emit(req *http.Request, exp *scenario.Experiment, host string) {
-	f.send(buildEvent(req, exp, host, ""))
+	f.send(buildEvent(req, exp, host, true, ""))
 }
 
-// emitErr publishes a non-fatal error encountered while applying a
-// fault (e.g. upstream stream read error during stream-cutoff). Fired
-// stays true because the fault behavior was applied; the Err field
-// surfaces the readout failure separately.
+// emitErr publishes an error that kept a fault from being applied (e.g. an
+// upstream stream read error before the stream-cutoff point). Fired is
+// false, so the event does not count as a fired fault; Err carries the
+// reason, like the eBPF injector's ringbuf error event.
 func (f *Faulter) emitErr(req *http.Request, exp *scenario.Experiment, host string, err error) {
 	if err == nil {
 		return
 	}
-	f.send(buildEvent(req, exp, host, err.Error()))
+	f.send(buildEvent(req, exp, host, false, err.Error()))
 }
 
 // send publishes ev unless closeEvents has sealed the channel. TrySend never
 // blocks, so holding sendMu across it cannot deadlock.
+//
+// A non-fired diagnostic is dropped once the buffer is half full. Those
+// events don't change the verdict, but a fired one does, so diagnostics
+// must not fill the slots a fired event needs. Every send holds sendMu, so
+// between the check and the send the buffer can only drain: diagnostics
+// never hold more than half of it.
 func (f *Faulter) send(ev inject.Event) {
 	f.sendMu.Lock()
 	defer f.sendMu.Unlock()
-	if !f.sealed {
-		inject.TrySend(f.events, ev)
+	if f.sealed {
+		return
 	}
+	if !ev.Fired && len(f.events) >= cap(f.events)/2 {
+		return
+	}
+	inject.TrySend(f.events, ev)
 }
 
 // closeEvents seals the faulter and closes its event channel exactly once;
@@ -226,7 +239,7 @@ func (f *Faulter) closeEvents() {
 	close(f.events)
 }
 
-func buildEvent(req *http.Request, exp *scenario.Experiment, host, errMsg string) inject.Event {
+func buildEvent(req *http.Request, exp *scenario.Experiment, host string, fired bool, errMsg string) inject.Event {
 	path := ""
 	if req != nil && req.URL != nil {
 		path = req.URL.Path
@@ -234,7 +247,7 @@ func buildEvent(req *http.Request, exp *scenario.Experiment, host, errMsg string
 	return inject.Event{
 		Experiment: exp.Name,
 		Fault:      exp.Fault,
-		Fired:      true,
+		Fired:      fired,
 		Host:       host,
 		Path:       path,
 		Timestamp:  time.Now(),
