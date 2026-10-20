@@ -276,3 +276,68 @@ func TestLoadBytesMatchMethodInvalid(t *testing.T) {
 		})
 	}
 }
+
+// response_mutation is an HTTP-level fault field with one allowed value. It
+// needs an HTTP match, stands alone among the HTTP fields, combines with a
+// delay, and isn't allowed on a fixture-driven experiment.
+func TestValidateResponseMutation(t *testing.T) {
+	const (
+		mcpMatch = "{host: mcp.example.com, path: /mcp}"
+		levelErr = "must both be HTTP-level or both syscall-level"
+		comboErr = "response_mutation can't be combined with"
+	)
+	cases := []struct {
+		name         string
+		yaml         string
+		wantSentinel error
+		wantSubstr   string
+	}{
+		{name: "with an http match", yaml: delayYAML("{response_mutation: mcp-schema-mismatch}", mcpMatch)},
+		{name: "with a method", yaml: delayYAML("{response_mutation: mcp-schema-mismatch}", "{host: mcp.example.com, method: POST}")},
+		{name: "with a delay", yaml: delayYAML("{response_mutation: mcp-schema-mismatch, delay_ms: 500, delay_jitter_ms: 100}", mcpMatch)},
+		{name: "unknown value", yaml: delayYAML("{response_mutation: schema-mismatch}", mcpMatch), wantSubstr: `response_mutation "schema-mismatch" is not one of: mcp-schema-mismatch`},
+		{name: "value in another case", yaml: delayYAML("{response_mutation: MCP-Schema-Mismatch}", mcpMatch), wantSubstr: "is not one of: mcp-schema-mismatch"},
+		{name: "with a syscall match", yaml: delayYAML("{response_mutation: mcp-schema-mismatch}", "{syscall: write}"), wantSubstr: levelErr},
+		{name: "with errno", yaml: delayYAML("{response_mutation: mcp-schema-mismatch, errno: EIO}", mcpMatch), wantSentinel: faulttypes.ErrFaultMixed},
+		{name: "with http_status", yaml: delayYAML("{response_mutation: mcp-schema-mismatch, http_status: 200}", mcpMatch), wantSubstr: comboErr},
+		{name: "with response_body", yaml: delayYAML("{response_mutation: mcp-schema-mismatch, response_body: '{}'}", mcpMatch), wantSubstr: comboErr},
+		{name: "with response_headers", yaml: delayYAML("{response_mutation: mcp-schema-mismatch, response_headers: {X-A: b}}", mcpMatch), wantSubstr: comboErr},
+		{name: "with stream_cutoff_tokens", yaml: delayYAML("{response_mutation: mcp-schema-mismatch, stream_cutoff_tokens: 3}", mcpMatch), wantSubstr: comboErr},
+		{
+			name:         "on a fixture-driven experiment",
+			yaml:         "name: bad\nexperiments:\n  - name: x\n    failure: rate-limited\n    fault: {response_mutation: mcp-schema-mismatch}\n    probability: 0.1\n",
+			wantSentinel: scenario.ErrExperimentMixed,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := scenario.LoadBytes([]byte(c.yaml))
+			if c.wantSentinel == nil && c.wantSubstr == "" {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("got nil, want error")
+			}
+			if c.wantSentinel != nil && !errors.Is(err, c.wantSentinel) {
+				t.Fatalf("err %v not wrapping %v", err, c.wantSentinel)
+			}
+			if c.wantSubstr != "" && !strings.Contains(err.Error(), c.wantSubstr) {
+				t.Fatalf("err %q does not contain %q", err.Error(), c.wantSubstr)
+			}
+		})
+	}
+}
+
+// The YAML key reaches the Fault field.
+func TestLoadBytesResponseMutationField(t *testing.T) {
+	s, err := scenario.LoadBytes([]byte(delayYAML("{response_mutation: mcp-schema-mismatch}", "{host: mcp.example.com}")))
+	if err != nil {
+		t.Fatalf("LoadBytes: %v", err)
+	}
+	if got := s.Experiments[0].Fault.ResponseMutation; got != "mcp-schema-mismatch" {
+		t.Errorf("ResponseMutation = %q, want mcp-schema-mismatch", got)
+	}
+}

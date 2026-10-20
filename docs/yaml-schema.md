@@ -2,9 +2,9 @@
 
 The schema for `--config <file>.yaml` and the embedded builtin
 scenarios. The v0.1 schema is stable; the `failure` and `provider`
-experiment fields, `match.method`, and the `delay_ms` and
-`delay_jitter_ms` fault fields were added **additively**, so every existing
-scenario keeps loading unchanged.
+experiment fields, `match.method`, and the `delay_ms`, `delay_jitter_ms`
+and `response_mutation` fault fields were added **additively**, so every
+existing scenario keeps loading unchanged.
 
 ---
 
@@ -109,7 +109,8 @@ fault:
 | `stream_cutoff_tokens` | int | For SSE streams: forwards N content deltas (≈ tokens) from upstream then drops the connection without `[DONE]`. Lifecycle events like `message_start` don't count. When set, faultkit forwards the real upstream response and ignores `http_status`, `response_headers`, and `response_body`; combining them isn't rejected. |
 
 A fault is HTTP-level if any of `http_status`, `response_headers`,
-`response_body`, or `stream_cutoff_tokens` is set.
+`response_body`, `stream_cutoff_tokens`, or
+[`response_mutation`](#response-mutation-forward-proxy-only) is set.
 
 A `stream_cutoff_tokens` fault counts as fired only when faultkit cuts a
 stream: the response is SSE (`Content-Type: text/event-stream`) and reaches
@@ -119,7 +120,46 @@ N deltas, passes through unchanged and adds no event. A line longer than
 read fails before the cut point, the report records an event with
 `fired: false` and the error in `err`. That event doesn't count as fired.
 In forward-proxy mode the proxy buffers its writes to the client, so a
-client that disconnects mid-stream can still be counted as fired.
+client that disconnects mid-stream can still be counted as fired. A cut
+that happens after the target exited, while faultkit lets open
+connections finish, doesn't count.
+
+### Response mutation (forward-proxy only)
+
+```yaml
+fault:
+  response_mutation: mcp-schema-mismatch   # edits the real upstream response
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `response_mutation` | string | Forwards the request and changes part of the real response instead of replacing it. The only value is `mcp-schema-mismatch`. It can't be combined with `http_status`, `response_headers`, `response_body` or `stream_cutoff_tokens`; it can be combined with the delay fields. |
+
+`mcp-schema-mismatch` targets MCP servers on the streamable HTTP
+transport. When a matched request is a JSON-RPC `tools/call`, faultkit
+takes the JSON-RPC response with the same `id` and changes the type of
+each top-level value in its `result.structuredContent`: a number becomes
+its text as a string, a string becomes the number it holds or else
+`true`, a boolean becomes `"true"` or `"false"`, and an object, array or
+`null` becomes its JSON text as a string. The `id`, the text in
+`content[]` and every other member stay as sent; the changed message is
+re-encoded compactly, with its object members in sorted order. It works
+on an `application/json` response and on each `data:` line of a
+`text/event-stream` response, whose other bytes pass through unchanged.
+
+Without `delay_ms`, the fault counts as fired only when a tool result is
+changed before the target exits. These pass through unchanged and add no
+event: requests other than `tools/call`, a result without
+`structuredContent` (or with an empty one), a request body or JSON
+response over 1 MiB, an event-stream line over 1 MiB, a compressed
+response, and batched JSON-RPC requests. A client that gives up on a
+`tools/call` but keeps running still gets the late result changed, and
+that counts as fired although the client never read it. With
+`delay_ms`, every matched request counts as fired when its delay starts
+(see [Delay](#delay-level-neutral)), even if no tool result is changed.
+Base-URL mode can't reach an MCP server, so there the fault never
+applies. See the
+[`mcp-tool-schema-mismatch` recipe](scenarios.md#mcp-tool-schema-mismatch).
 
 ### Syscall-level fault (eBPF mode)
 
@@ -142,7 +182,7 @@ fault:
 
 | Field | Type | Notes |
 |---|---|---|
-| `delay_ms` | int | Milliseconds faultkit holds a matched request before anything else happens to it. With no other field set, the request is then forwarded unchanged to the real upstream, so the response (streamed or not) starts that much later. With `http_status`, `response_headers` or `response_body`, the synthetic response is sent after the delay and the upstream is never contacted. With `stream_cutoff_tokens`, the request is forwarded after the delay and the stream is cut as usual. |
+| `delay_ms` | int | Milliseconds faultkit holds a matched request before anything else happens to it. With no other field set, the request is then forwarded unchanged to the real upstream, so the response (streamed or not) starts that much later. With `http_status`, `response_headers` or `response_body`, the synthetic response is sent after the delay and the upstream is never contacted. With `stream_cutoff_tokens` or `response_mutation`, the request is forwarded after the delay and the stream is cut, or the response changed, as usual. |
 | `delay_jitter_ms` | int | Adds a random 0 to `delay_jitter_ms` ms (both ends included), drawn per request. Requires `delay_ms`. |
 
 A delay is level-neutral: it counts as neither an HTTP-level nor a
@@ -165,7 +205,8 @@ stream cut meant to follow the delay never reached the client. The report
 doesn't say which part of the fault was applied. What follows the delay
 doesn't add a second event either, so with `stream_cutoff_tokens` the
 delay alone counts as an applied fault, even if the stream never reaches
-the cut point.
+the cut point. With `response_mutation`, every matched request is held,
+not only `tools/call`, so each counts as fired when its delay starts.
 
 When the run ends (the target exits), faultkit cuts every pending delay
 short and drops those connections; a held request is never forwarded
@@ -175,8 +216,8 @@ way. faultkit doesn't notice a client that gives up during the delay of a
 request with a body (a `POST`, as most LLM calls are), or any client in
 forward-proxy mode: if the run is still going when the delay runs out,
 the request is forwarded upstream anyway. For a delay-only fault, or a
-delay with `stream_cutoff_tokens` (also forwarded after its delay), that
-is a real, possibly billed, API call.
+delay with `stream_cutoff_tokens` or `response_mutation` (also forwarded
+after its delay), that is a real, possibly billed, API call.
 
 In forward-proxy mode the proxy gives each request on a client connection
 5 minutes, counted from when it starts waiting for that request. The
@@ -184,8 +225,8 @@ delay, the upstream call and writing the response all have to fit in
 that window. A delay close to the cap leaves no time for the rest: the
 client sees the connection close instead of a response, yet a request
 that is forwarded after its delay (delay-only, or with
-`stream_cutoff_tokens`) can still reach the upstream, in full or with its
-body cut short.
+`stream_cutoff_tokens` or `response_mutation`) can still reach the
+upstream, in full or with its body cut short.
 
 ## Match
 
@@ -235,6 +276,7 @@ fail:
 - `match.method` is not one of `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`.
 - `fault` and `match` disagree on level (e.g. HTTP fault with syscall match). The delay fields have no level, so they never cause this.
 - `delay_ms` or `delay_jitter_ms` is negative, `delay_jitter_ms` is set without `delay_ms`, or `delay_ms + delay_jitter_ms` exceeds `300000`.
+- `response_mutation` is not `mcp-schema-mismatch`, or is set together with `http_status`, `response_headers`, `response_body` or `stream_cutoff_tokens`.
 
 Errors come back as exit code `4` (usage error).
 

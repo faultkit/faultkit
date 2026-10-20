@@ -60,14 +60,25 @@ func (f *Faulter) cancelDelays() {
 }
 
 // emitEffect emits the fired event for an effect that follows the delay:
-// a synthetic response or a stream cut. When the fault has a delay, hold
-// already emitted the request's fired event at the delay's start, so the
-// request is not counted twice. With a stream cutoff, the delay alone
-// therefore counts as the applied fault, even if the stream never reaches
-// the cut point.
+// a synthetic response, a stream cut or a response mutation. When the fault
+// has a delay, hold already emitted the request's fired event at the
+// delay's start, so the request is not counted twice. With a stream cutoff
+// or a response mutation, the delay alone therefore counts as the applied
+// fault, even if the stream never reaches the cut point or nothing is
+// mutated.
+//
+// An effect applied after Stop began doesn't count either, just as hold
+// won't start a delay then. Stop runs once the target has exited, so the
+// target never saw the effect, yet the transports finish their open
+// connections before the event channel is sealed.
 func (f *Faulter) emitEffect(req *http.Request, exp *scenario.Experiment, host string) {
 	if exp.Fault.DelayMS > 0 {
 		return
+	}
+	select {
+	case <-f.stop:
+		return
+	default:
 	}
 	f.emit(req, exp, host)
 }

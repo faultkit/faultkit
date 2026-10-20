@@ -74,6 +74,7 @@ Run `faultkit scenario list` to see what's available on your installation.
 | Scenario | Mode | What it tests |
 |---|---|---|
 | `memory-write-failure` | proxy (forward-proxy only) | A store write is acknowledged but never stored; the next read is stale |
+| `mcp-tool-schema-mismatch` | proxy (forward-proxy only) | An MCP tool result's `structuredContent` no longer matches the tool's `outputSchema` |
 
 ---
 
@@ -819,9 +820,9 @@ loop terminates without explanation. The user sees a generic
 ## Recipes
 
 Some failures only make sense against a host faultkit can't know in
-advance, such as your own memory store. These ship as recipes: copy the
-YAML into a file, point it at your host, and run it with `--config`.
-They aren't builtins, so `faultkit run --scenario` and
+advance, such as your own memory store or MCP server. These ship as
+recipes: copy the YAML into a file, point it at your host, and run it
+with `--config`. They aren't builtins, so `faultkit run --scenario` and
 `faultkit scenario list` don't know them.
 
 ### `memory-write-failure`
@@ -950,6 +951,143 @@ The next step reads the old memory and acts on it: the user's updated
 preference is ignored, a finished task is done again, a summary loses
 the last turn. Nothing in the logs says a write failed.
 
+### `mcp-tool-schema-mismatch`
+
+Your agent calls tools on an MCP server. In `tools/list` the server
+declares each tool's `outputSchema`, and a `tools/call` result carries
+`structuredContent` that should match it. Then the server is upgraded,
+or another version is deployed behind the same URL, and a field changes
+type: the temperature arrives as `"22.5"` instead of `22.5`.
+
+A client that validates `structuredContent` against the declared
+`outputSchema` rejects the result with an error. A client that doesn't
+validate passes the wrong types on to the agent.
+
+The recipe sets `response_mutation: mcp-schema-mismatch`. faultkit
+forwards every request to your real MCP server. In the response to a
+`tools/call` request, it changes the type of each top-level value in
+`result.structuredContent`:
+
+| Value | Becomes |
+|---|---|
+| number | its text, as a string: `22.5` → `"22.5"` |
+| string | the number it holds (`"65"` → `65`), otherwise `true` |
+| boolean | `"true"` or `"false"` |
+| object, array, `null` | its JSON text, as a string: `{"id":7}` → `"{\"id\":7}"` |
+
+Everything else stays as the server sent it: the message's `id`,
+`content`, `isError` and `_meta`, and any other message in the same
+response, such as a progress notification. Requests other than
+`tools/call` (`initialize`, `tools/list`, notifications) pass through
+untouched.
+
+**Limits:**
+
+- **Needs a faultkit release newer than 0.1.3.** `response_mutation` is
+  new; 0.1.3 and earlier don't know the field and reject the experiment
+  as an empty fault (exit `4`).
+- **Streamable HTTP only.** A server the client starts as a subprocess
+  and talks to over stdio never goes through faultkit. Neither does the
+  older HTTP+SSE transport, which sends the result on a separate event
+  stream instead of in the response to the `tools/call` request.
+- **Forward-proxy mode only.** `--base-url` only routes OpenAI and
+  Anthropic traffic, so it can't reach an MCP server. The MCP client
+  must send its traffic through `HTTPS_PROXY` (or `HTTP_PROXY` for an
+  `http://` server) and, over HTTPS, trust the CA bundle faultkit
+  injects (`SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE`, `NODE_EXTRA_CA_CERTS`,
+  …). Some HTTP clients ignore those variables, and some never send
+  loopback traffic through a proxy (Go's `net/http` is one), so a server
+  on `localhost` may never see the fault.
+- **`structuredContent` only.** The text in `content[]`, which carries
+  the same data for clients that don't read `structuredContent`, isn't
+  changed. A client that only reads the text content sees no mismatch,
+  yet the run still counts the fault as fired, so it can report
+  `invariant_proven_under_fault` without having tested anything. A
+  result without `structuredContent` is left alone, and fires nothing.
+- **A late result counts while the client is still running.** A tool
+  result changed after the target exited doesn't count. But if the
+  client gives up on a `tools/call` (a timeout, a cancelled task) and
+  keeps running, the late result is still changed and counts as fired,
+  although the agent never read it.
+- **Bounded and uncompressed.** A request body or JSON response over
+  1 MiB, an event-stream line over 1 MiB, a compressed response and a
+  batched JSON-RPC request all pass through unchanged. In an event
+  stream each `data:` line is checked on its own, so a message split
+  across several `data:` lines isn't changed.
+- **The changed message is re-encoded.** It comes back compact, with
+  its object members in sorted order. JSON doesn't depend on member
+  order, but a client that compares raw bytes notices.
+
+**What it tests:**
+
+- Whether the agent checks tool results against the declared schema
+- What the agent does when its MCP client rejects a result: report a
+  tool error and carry on, or crash
+- Code that assumes the types of structured results, such as
+  `result["temperature"] > 30`
+
+**YAML** (save as `mcp-tool-schema-mismatch.yaml`):
+
+```yaml
+name: mcp-tool-schema-mismatch
+description: MCP tool results come back with structuredContent that breaks the tool's outputSchema.
+experiments:
+  - name: "tool result breaks its outputSchema"
+    fault:
+      response_mutation: mcp-schema-mismatch
+    match:
+      host: "mcp.example.com"    # replace with your MCP server's host
+      path: "/mcp"               # replace with your MCP endpoint path
+      method: POST
+    probability: 1.0
+```
+
+Replace the host and path with your MCP server's; `host` is required, a
+match without it never fires. `method: POST` keeps the experiment off
+the `GET` event stream a client may open for server messages; every
+`tools/call` is a `POST`. `probability: 1.0` changes every tool result,
+so the run is repeatable; lower it to change only some.
+
+**Run it:**
+
+```bash
+faultkit run --config mcp-tool-schema-mismatch.yaml -- pytest tests/agent/
+```
+
+Each changed tool result is a fired event in the report. Without
+`delay_ms`, nothing else is: a `tools/call` whose result has no
+`structuredContent` passes through and adds no event. Without
+`delay_ms`, if no tool result was changed (wrong host or path, a client
+that bypasses the proxy, a server that compresses its responses, or
+tools without `structuredContent`), the run proves nothing: the verdict
+is `invalid_evidence`, and faultkit exits `3` unless the target itself
+failed.
+
+At `probability: 1.0` every tool result is wrong, including retries, so
+the only correct outcome is the agent reporting a tool error. A test
+that expects that error and passes gets `invariant_proven_under_fault`
+(exit `0`). If the agent crashes on the rejected result, the target
+fails and the verdict is `silent_failure_confirmed` (exit `1`).
+
+If you add `delay_ms` too, every matched request is held, `initialize`
+and `tools/list` included, and counts as fired when its delay starts.
+The changed tool result then adds no second event. So the run counts as
+fired even if no tool result was changed, and the verdict can't show
+that the mismatch reached the client.
+
+**What good behavior looks like:**
+
+The agent treats a result that doesn't match its schema as a failed
+tool call. It reports the tool error, retries or falls back, and never
+acts on the mistyped values.
+
+**What bad behavior looks like:**
+
+The client's validation error escapes and ends the agent's loop. Or,
+with a client that doesn't validate, the agent compares the string
+`"22.5"` to a number, adds to it, or stores it where a number belongs,
+and nothing in the logs says the tool's output was wrong.
+
 ---
 
 ## Composing scenarios
@@ -1002,7 +1140,6 @@ latency/hang primitive, then the eBPF/shim subprocess track):
 | Scenario | Mechanism | What it will test |
 |---|---|---|
 | `gateway-timeout` | proxy | LiteLLM / Portkey / gateway returns slow or hangs |
-| `mcp-tool-schema-mismatch` | proxy | MCP result doesn't match its declared schema |
 | `subagent-timeout` | proxy | A subagent tool call never returns |
 | `tool-call-flaky` | eBPF / shim | Truncated stdout, exit 0 — partial data, no error raised |
 | `partial-tool-result` | eBPF / shim | Valid-but-incomplete tool result, exit 0 |

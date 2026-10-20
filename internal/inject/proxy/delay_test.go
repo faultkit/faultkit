@@ -70,6 +70,8 @@ func TestIsSynthetic(t *testing.T) {
 		{"delay only", faulttypes.Fault{DelayMS: 50, DelayJitterMS: 10}, false},
 		{"stream cutoff", faulttypes.Fault{StreamCutoffTokens: 3}, false},
 		{"delay and stream cutoff", faulttypes.Fault{DelayMS: 50, StreamCutoffTokens: 3}, false},
+		{"response mutation", faulttypes.Fault{ResponseMutation: "mcp-schema-mismatch"}, false},
+		{"delay and response mutation", faulttypes.Fault{DelayMS: 50, ResponseMutation: "mcp-schema-mismatch"}, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

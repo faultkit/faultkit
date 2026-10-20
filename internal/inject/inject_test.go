@@ -58,6 +58,27 @@ func TestEventJSONUnchangedForExistingFaults(t *testing.T) {
 	}
 }
 
+// A response-mutation event carries the new field, after the v1 HTTP
+// fields, and nothing else changes.
+func TestEventJSONResponseMutation(t *testing.T) {
+	ev := inject.Event{
+		Experiment: "schema-mismatch",
+		Fault:      faulttypes.Fault{ResponseMutation: "mcp-schema-mismatch"},
+		Fired:      true,
+		Host:       "mcp.example.com",
+		Path:       "/mcp",
+		Timestamp:  time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
+	}
+	const want = `{"experiment":"schema-mismatch","fault":{"HTTPStatus":0,"ResponseHeaders":null,"ResponseBody":"","StreamCutoffTokens":0,"ResponseMutation":"mcp-schema-mismatch","Errno":""},"fired":true,"host":"mcp.example.com","path":"/mcp","timestamp":"2026-01-02T03:04:05Z"}`
+	got, err := json.Marshal(ev)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if string(got) != want {
+		t.Errorf("event JSON:\n got %s\nwant %s", got, want)
+	}
+}
+
 func TestAvailableModesIncludesBothKnown(t *testing.T) {
 	got := inject.AvailableModes()
 	seen := map[inject.Mode]bool{}

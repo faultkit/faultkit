@@ -265,3 +265,42 @@ func TestOriginMatchMethod(t *testing.T) {
 		t.Errorf("event = %+v, want the POST's fired event", ev)
 	}
 }
+
+// Base-URL mode can't route MCP hosts, so a response mutation is
+// forward-proxy only. Here a matched request is forwarded, never
+// synthesized, and even a tools/call response with structuredContent
+// passes through unmutated, with no event.
+func TestOriginResponseMutationPassesThrough(t *testing.T) {
+	const upstreamBody = `{"jsonrpc":"2.0","id":1,"result":{"structuredContent":{"n":1}}}`
+	s := &scenario.Scenario{
+		Name: "origin-mutation",
+		Experiments: []scenario.Experiment{{
+			Name:        "openai-mutation",
+			Fault:       faulttypes.Fault{ResponseMutation: "mcp-schema-mismatch"},
+			Match:       scenario.Match{Host: "api.openai.com", Path: "/v1/*"},
+			Probability: 1,
+		}},
+	}
+	h, events := newOriginTestHandler(t, s)
+	up := &upstreamRecorder{next: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, upstreamBody)
+	})}
+	routeToLocalUpstream(t, h, up)
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/__fk/openai/v1/chat/completions",
+		strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{}}`)))
+	if rec.Code != http.StatusOK || rec.Body.String() != upstreamBody || rec.Header().Get(syntheticHeader) != "" {
+		t.Errorf("got %d %q (synthetic %q), want the upstream's 200 %q", rec.Code, rec.Body.String(), rec.Header().Get(syntheticHeader), upstreamBody)
+	}
+	up.mu.Lock()
+	hits := up.hits
+	up.mu.Unlock()
+	if hits != 1 {
+		t.Errorf("upstream reached %d times, want 1", hits)
+	}
+	if len(events) != 0 {
+		t.Errorf("got %d events, want none", len(events))
+	}
+}

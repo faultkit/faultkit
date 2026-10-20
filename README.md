@@ -206,7 +206,7 @@ intact but base-URL mode would break, so `--base-url` doesn't target it.
 
 | Scenario | What it does | Status |
 |---|---|:---:|
-| `mcp-tool-schema-mismatch` | MCP server returns a result that doesn't match its declared schema | 🛣️ |
+| `mcp-tool-schema-mismatch` | An MCP server's `tools/call` result no longer matches the tool's declared `outputSchema`: each top-level `structuredContent` value changes type. Streamable-HTTP MCP servers in forward-proxy mode only (not stdio, not `--base-url`), and `structuredContent` only, not the text in `content[]`, via a [copy-paste recipe](docs/scenarios.md#mcp-tool-schema-mismatch) | ✅ |
 | `subagent-timeout` | A subagent tool call never returns — tests the orchestration ceiling | 🛣️ |
 | `memory-write-failure` | An HTTP memory store acknowledges a write it never stores; the next read is stale. HTTP-backed stores and forward-proxy mode only, via a [copy-paste recipe](docs/scenarios.md#memory-write-failure) | ✅ |
 

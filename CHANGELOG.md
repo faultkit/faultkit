@@ -68,6 +68,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reach it, while reads pass through and return the old data. It works for
   HTTP-backed stores in forward-proxy mode only, and isn't a builtin: copy
   the YAML and run it with `--config`.
+- **`response_mutation` fault field.** Instead of replacing the upstream
+  response, faultkit forwards the request and changes part of the real
+  response. The only value, `mcp-schema-mismatch`, changes the type of
+  every top-level value in `result.structuredContent` of an MCP
+  `tools/call` result, in a JSON body or an event stream. The JSON-RPC
+  `id`, the text in `content[]` and the rest of the message keep their
+  values; the changed message is re-encoded compactly with sorted keys,
+  and the rest of an event stream passes through byte for byte. Without
+  `delay_ms`, the fault counts as fired only when a tool result was
+  changed before the target exited: other requests, results without
+  `structuredContent`, bodies or lines over 1 MiB, compressed responses
+  and batches pass through without an event. With `delay_ms`, every
+  matched request counts as fired when its delay starts, even if no tool
+  result is changed.
+  It works in forward-proxy mode only and can't be combined with
+  `http_status`, `response_headers`, `response_body` or
+  `stream_cutoff_tokens`. An unknown value or such a combination fails
+  validation (exit `4`). The field is left out of the report's event JSON
+  when unset, so `report/v1` output for existing scenarios is unchanged.
+- **`mcp-tool-schema-mismatch` recipe** in docs/scenarios.md. Tool
+  results from your MCP server come back with `structuredContent` that no
+  longer matches the tool's `outputSchema`. It covers streamable-HTTP MCP
+  servers in forward-proxy mode only, not stdio servers, and isn't a
+  builtin: copy the YAML and run it with `--config`.
 
 ### Changed
 
@@ -112,6 +136,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `fired: false` now use at most half of the proxy's event buffer, so a
   burst of them can't make faultkit drop the fired event that decides the
   verdict.
+- **A stream cut after the target exited no longer counts as fired.** Once
+  the target exits, faultkit lets open proxy connections finish before it
+  writes the report. A stream-cutoff stream that reached its cut point in
+  that time added a fired event, so a run whose target never saw a cut
+  could report the fault as fired, and even claim
+  `invariant_proven_under_fault`. Such a cut, or a synthetic response
+  written in that time, now adds no event. If nothing else fired, the run
+  ends with `invalid_evidence`: exit `3` if the target succeeded.
 
 ### Build / supply chain
 
