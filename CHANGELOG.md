@@ -92,6 +92,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   longer matches the tool's `outputSchema`. It covers streamable-HTTP MCP
   servers in forward-proxy mode only, not stdio servers, and isn't a
   builtin: copy the YAML and run it with `--config`.
+- **`gateway-timeout` recipes** in docs/scenarios.md, in two variants.
+  Requests to your LLM gateway are held 30 s and then forwarded
+  unchanged, or held 60 s and then answered with a synthetic 504; that
+  request never reaches the gateway. They work in forward-proxy mode only, and a
+  gateway on `localhost` is reached only by clients that send loopback
+  traffic through the proxy; for a local gateway, the docs show how to
+  fault its own calls to the provider instead.
+- **`subagent-timeout` recipe** in docs/scenarios.md. Calls to a
+  sub-agent's HTTP endpoint (A2A, MCP over streamable HTTP, or your own)
+  are held for the 5-minute maximum, so they don't return within the
+  run; when the target exits, faultkit drops them without forwarding
+  them. It covers HTTP sub-agents in forward-proxy mode only, not stdio
+  MCP servers or subprocesses. Like `memory-write-failure`, neither
+  recipe is a builtin: copy the YAML and run it with `--config`.
 
 ### Changed
 
