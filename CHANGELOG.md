@@ -158,6 +158,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `invariant_proven_under_fault`. Such a cut, or a synthetic response
   written in that time, now adds no event. If nothing else fired, the run
   ends with `invalid_evidence`: exit `3` if the target succeeded.
+- **A run whose TLS handshakes with the proxy all failed no longer says no
+  request reached faultkit.** A client that rejects faultkit's CA, or that
+  offers only HTTP/2 (gRPC), reaches the proxy but never completes the
+  handshake. faultkit now counts those handshakes and, when no fault fired,
+  warns with the count and the first error instead of telling you the client
+  ignored `HTTPS_PROXY`.
+- **The no-traffic warning no longer suggests `--base-url` for clients it
+  can't help.** It now says to pass the proxy settings to the client, and
+  mentions `--base-url` only for the OpenAI and Anthropic SDKs, the ones
+  base-URL mode covers.
+- These warnings now also print when the target itself failed. A client
+  that can't get through the proxy usually fails for that reason alone, and
+  before, the warning only appeared when the target exited `0`. Exit codes
+  are unchanged.
 
 ### Build / supply chain
 
@@ -224,6 +238,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (✅ = shipped, 🛣️ = planned), and the README and docs/scenarios.md no
   longer count the scenarios. docs/scenarios.md calls its roadmap scenarios
   planned, with no v0.2 date and no claim that they're tracked as issues.
+- docs/scenarios.md and the README say Pinecone's Python SDK ignores
+  `HTTPS_PROXY` and `SSL_CERT_FILE`: `rag-stale-results` needs them passed
+  as `proxy_url` and `ssl_ca_certs`. Qdrant's Python client reads them from
+  the environment.
 
 ## [0.1.3] - 2026-09-26
 

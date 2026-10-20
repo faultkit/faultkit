@@ -45,6 +45,14 @@ type Injector struct {
 
 	faulter *Faulter // shared by both modes; counts requests reaching faultkit
 
+	// Forward-proxy only: TLS handshakes the target started with the MITM
+	// but didn't complete (it rejected the per-run CA, or offered only h2).
+	handshakeMu       sync.Mutex
+	handshakeFailures int
+	// "host:port: error" of the first failure. Later ones are often the
+	// client's retries ending in a reset, which hides the cause.
+	firstHandshakeErr string
+
 	events chan inject.Event
 	vlog   inject.Logf
 
@@ -103,7 +111,7 @@ func (i *Injector) Start(_ context.Context, s *scenario.Scenario) ([]string, err
 		return nil, err
 	}
 
-	server, err := NewServer(ca)
+	server, err := NewServer(ca, i.recordHandshakeError)
 	if err != nil {
 		_ = ca.Cleanup()
 		return nil, err
@@ -240,13 +248,34 @@ func (i *Injector) Events() <-chan inject.Event {
 
 // RequestsSeen reports how many target requests reached the proxy.
 // Implements inject.RequestObserver. Zero after a run means the target's
-// traffic never arrived — it ignored HTTPS_PROXY, or never used the
-// injected base URL.
+// traffic never arrived — it ignored HTTPS_PROXY, never used the injected
+// base URL, or never completed a TLS handshake (see FailedHandshakes).
 func (i *Injector) RequestsSeen() int {
 	if i.faulter == nil {
 		return 0
 	}
 	return i.faulter.Seen()
+}
+
+// FailedHandshakes reports how many TLS handshakes the target started with
+// the forward proxy but didn't complete, and the first failure as
+// "host:port: error". Implements inject.RequestObserver. Always zero in
+// base-URL mode, where the target talks plain HTTP to faultkit.
+func (i *Injector) FailedHandshakes() (int, string) {
+	i.handshakeMu.Lock()
+	defer i.handshakeMu.Unlock()
+	return i.handshakeFailures, i.firstHandshakeErr
+}
+
+// recordHandshakeError is the MITM server's handshake-failure callback; it
+// runs on connection goroutines.
+func (i *Injector) recordHandshakeError(host string, err error) {
+	i.handshakeMu.Lock()
+	defer i.handshakeMu.Unlock()
+	i.handshakeFailures++
+	if i.firstHandshakeErr == "" {
+		i.firstHandshakeErr = host + ": " + err.Error()
+	}
 }
 
 // Proxy returns the underlying martian proxy so callers can install

@@ -168,30 +168,52 @@ func runFaultkit(parentCtx context.Context, o runOpts) error {
 	if runErr != nil {
 		return runErr
 	}
+	if summary.FiredCount() == 0 {
+		if ro, ok := inj.(inject.RequestObserver); ok {
+			warnTrafficMissed(o, ro)
+		}
+	}
 	if targetExit != 0 {
 		return &runner.TargetExitError{ExitCode: targetExit}
 	}
 	if summary.FiredCount() == 0 {
-		if ro, ok := inj.(inject.RequestObserver); ok && ro.RequestsSeen() == 0 {
-			warnNoTrafficReached(o)
-		}
 		return runner.ErrFaultNotFired
 	}
 	return nil
 }
 
-// warnNoTrafficReached flags the silent-green trap: the run "passed" only
-// because no request ever reached faultkit, so no fault could fire. The
-// likely cause differs by mode.
-func warnNoTrafficReached(o runOpts) {
+// warnTrafficMissed flags a run where no fault fired because the target's
+// traffic never got through to faultkit: the target connected but no TLS
+// handshake completed, or no request arrived at all. A run like that would
+// otherwise read as "the target held" (or, if the target failed, as "the
+// fault broke it"), so it warns whatever the target's exit code. The likely
+// cause differs by mode.
+func warnTrafficMissed(o runOpts, ro inject.RequestObserver) {
+	if n, first := ro.FailedHandshakes(); n > 0 {
+		handshakes := "1 TLS handshake"
+		if n > 1 {
+			handshakes = fmt.Sprintf("%d TLS handshakes", n)
+		}
+		fmt.Fprintf(o.stderr, "warning: %s between the target and faultkit's proxy failed (first: %s). The client "+
+			"either doesn't trust faultkit's per-run CA (its path is in SSL_CERT_FILE; some SDKs need it passed "+
+			"explicitly, such as Pinecone's ssl_ca_certs) or needs HTTP/2, which the proxy doesn't serve (gRPC "+
+			"clients).\n", handshakes, first)
+		return
+	}
+	if ro.RequestsSeen() > 0 {
+		return
+	}
 	if o.baseURL {
 		fmt.Fprintln(o.stderr, "warning: no requests reached faultkit — the target's SDK did not use the "+
 			"injected base URL (OPENAI_BASE_URL / ANTHROPIC_BASE_URL). Confirm the SDK reads it and the "+
 			"scenario host is a supported provider.")
 		return
 	}
-	fmt.Fprintln(o.stderr, "warning: no requests reached faultkit's proxy — the target likely ignores "+
-		"HTTPS_PROXY (common with Node fetch/undici and subprocess SDKs). For SDK clients, try --base-url.")
+	fmt.Fprintln(o.stderr, "warning: no requests reached faultkit's proxy — the target likely ignores HTTPS_PROXY "+
+		"(Node fetch/undici, SDKs in a subprocess with a filtered environment, and SDKs that take proxy settings "+
+		"only as arguments, such as Pinecone's Python client). Pass the proxy to the client explicitly: "+
+		"HTTPS_PROXY and SSL_CERT_FILE are set in its environment. For the OpenAI and Anthropic SDKs, "+
+		"--base-url also works.")
 }
 
 func loadScenario(o runOpts) (*scenario.Scenario, error) {
