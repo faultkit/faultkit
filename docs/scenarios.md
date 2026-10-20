@@ -658,18 +658,20 @@ isolation, retry safety, or a general RAG invariant.
 - **Forward-proxy only.** The vector-DB client must route through
   `HTTPS_PROXY` and trust faultkit's CA (`SSL_CERT_FILE`,
   `REQUESTS_CA_BUNDLE`, …); `--base-url` doesn't target vector databases.
-  Pinecone's Python SDK documents its proxy settings as the `proxy_url` and
-  `ssl_ca_certs` arguments — if your client doesn't pick up the environment,
-  pass `os.environ["HTTPS_PROXY"]` and `os.environ["SSL_CERT_FILE"]` there.
-  If no query reaches faultkit, nothing fires, and zero fired faults never
-  produce a passing run: faultkit exits `3` if the target otherwise
-  succeeded, or `1` if the target itself failed — with verdict
-  `invalid_evidence` either way.
+  Qdrant's Python client (`qdrant-client`, REST) reads both from the
+  environment. Pinecone's Python SDK reads neither: pass them to the client,
+  `Pinecone(api_key=…, proxy_url=os.environ["HTTPS_PROXY"],
+  ssl_ca_certs=os.environ["SSL_CERT_FILE"])`, or its queries go straight to
+  Pinecone and faultkit warns that no request reached its proxy. (Checked
+  with `qdrant-client` 1.19.1 and `pinecone` 10.0.0.) If no query reaches
+  faultkit, nothing fires, and zero fired faults never produce a passing
+  run: faultkit exits `3` if the target otherwise succeeded, or `1` if the
+  target itself failed — with verdict `invalid_evidence` either way.
 - **REST only.** gRPC clients (Pinecone's `GrpcIndex`, Qdrant on port 6334
   or with `prefer_grpc=True`) aren't faulted. If they honour
   `HTTPS_PROXY`/`grpc_proxy`, they fail to connect at all: the proxy only
   offers HTTP/1.1, and gRPC needs HTTP/2, so the TLS handshake ends with
-  `no_application_protocol`.
+  `no_application_protocol`, and faultkit warns that the handshake failed.
 - **One endpoint per provider.** Pinecone's integrated-inference search
   (`/records/namespaces/*/search`), Qdrant's legacy `/points/search`, and
   the batch `/points/query/batch` return different shapes and aren't faulted.

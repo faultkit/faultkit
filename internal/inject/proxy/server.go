@@ -3,6 +3,7 @@ package proxy
 import (
 	"fmt"
 	"net"
+	"net/http"
 
 	"github.com/google/martian/v3"
 	"github.com/google/martian/v3/mitm"
@@ -16,13 +17,21 @@ type Server struct {
 }
 
 // NewServer constructs a Server using ca as the MITM signing root.
-func NewServer(ca *CA) (*Server, error) {
+// onHandshakeError, if non-nil, is called with the CONNECT host when a
+// client's TLS handshake with the proxy fails. It runs on the connection's
+// goroutine, so it must be safe for concurrent use.
+func NewServer(ca *CA, onHandshakeError func(host string, err error)) (*Server, error) {
 	config, err := mitm.NewConfig(ca.Cert(), ca.Key())
 	if err != nil {
 		return nil, fmt.Errorf("server: mitm config: %w", err)
 	}
 	config.SetValidity(caValidity)
 	config.SetOrganization("faultkit")
+	if onHandshakeError != nil {
+		config.SetHandshakeErrorCallback(func(req *http.Request, err error) {
+			onHandshakeError(req.Host, err)
+		})
+	}
 
 	p := martian.NewProxy()
 	p.SetMITM(config)

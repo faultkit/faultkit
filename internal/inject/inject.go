@@ -70,14 +70,19 @@ type VerboseAware interface {
 	SetVerbose(Logf)
 }
 
-// RequestObserver is implemented by injectors that can report how many
-// target requests actually reached them. The CLI uses it to tell apart
+// RequestObserver is implemented by injectors that can report how much of
+// the target's traffic actually reached them. The CLI uses it to tell apart
 // "the target hit faultkit but nothing matched" from "no traffic reached
 // faultkit at all" (the target ignored HTTPS_PROXY, or never used the
-// injected base URL) — so a misleading green run can be flagged. Only the
-// proxy injector implements it; eBPF has no equivalent notion.
+// injected base URL) and from "the target connected but no TLS handshake
+// completed" (it rejected faultkit's CA, or needs HTTP/2) — so a misleading
+// run can be flagged. Only the proxy injector implements it; eBPF has no
+// equivalent notion.
 type RequestObserver interface {
 	RequestsSeen() int
+	// FailedHandshakes returns the number of TLS handshakes the target
+	// started with faultkit but didn't complete, and the first failure.
+	FailedHandshakes() (count int, first string)
 }
 
 // TrySend non-blockingly sends ev on ch, dropping when the buffer is
