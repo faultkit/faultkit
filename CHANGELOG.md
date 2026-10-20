@@ -38,6 +38,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   doesn't target them, and gRPC clients that honour the proxy settings fail
   to connect, because the proxy only speaks HTTP/1.1.
 
+### Fixed
+
+- **A proxy fault event that arrives after shutdown no longer crashes
+  faultkit.** A stream-cutoff stream whose client went away, or a base-URL
+  request still in flight when the target exited, could send an event after
+  the proxy closed its event channel. That crashed faultkit with a Go panic
+  before it wrote the report. Such late events are now dropped.
+
 ### Build / supply chain
 
 - **Go 1.26.9 and `golang.org/x/net` v0.60.0** fix nine vulnerabilities
