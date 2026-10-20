@@ -5,6 +5,7 @@ package ebpf
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/faultkit/faultkit/pkg/faulttypes"
@@ -80,6 +81,41 @@ func TestStartRejectsUnsupportedScenario(t *testing.T) {
 	}
 	if _, err := inj.Start(context.Background(), s); err == nil {
 		t.Errorf("expected error for unimplemented (write/EIO), got nil")
+	}
+}
+
+// A syscall experiment with a delay passes scenario validation (delays are
+// level-neutral), but no eBPF program delays a syscall yet, so Start must
+// refuse it before loading anything, even for an errno/syscall pair it
+// otherwise supports.
+func TestStartRejectsDelay(t *testing.T) {
+	cases := []struct {
+		name  string
+		fault faulttypes.Fault
+		match scenario.Match
+	}{
+		{name: "delay only", fault: faulttypes.Fault{DelayMS: 500}, match: scenario.Match{Syscall: "write"}},
+		{name: "delay on a supported errno", fault: faulttypes.Fault{Errno: "ECONNRESET", DelayMS: 500, DelayJitterMS: 100}, match: scenario.Match{Syscall: "recvmsg"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			inj := New()
+			t.Cleanup(func() { _ = inj.Stop(context.Background()) })
+			s := &scenario.Scenario{
+				Name:        "syscall-delay",
+				Experiments: []scenario.Experiment{{Name: "x", Fault: c.fault, Match: c.match, Probability: 1}},
+			}
+			if err := s.Validate(); err != nil {
+				t.Fatalf("Validate: %v, want a syscall delay to pass validation", err)
+			}
+			_, err := inj.Start(context.Background(), s)
+			if err == nil || !strings.Contains(err.Error(), "delay_ms is not supported") {
+				t.Fatalf("Start err = %v, want the delay refused", err)
+			}
+			if inj.closeObjs != nil {
+				t.Error("Start loaded a BPF program for a refused delay")
+			}
+		})
 	}
 }
 

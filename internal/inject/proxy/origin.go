@@ -49,10 +49,10 @@ func newOriginHandler(faulter *Faulter, vlog inject.Logf) *originHandler {
 				return nil
 			}
 			p, _ := res.Request.Context().Value(ctxOriginProvider).(provider)
-			// As in forward-proxy mode, the fault fires only if the stream
-			// reaches the cut point.
+			// As in forward-proxy mode, without a delay the fault fires only
+			// if the stream reaches the cut point.
 			wrapStreamCutoff(res, exp.Fault.StreamCutoffTokens, func() {
-				h.faulter.emit(res.Request, exp, p.upstream)
+				h.faulter.emitEffect(res.Request, exp, p.upstream)
 			}, func(err error) {
 				h.faulter.emitErr(res.Request, exp, p.upstream, err)
 			})
@@ -77,14 +77,24 @@ func (h *originHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// instead of mutating the request to fool the matcher.
 	exp := h.faulter.DecideHostPath(p.upstream, rest)
 
+	// A delay holds the request before anything else. If Stop or the client
+	// cuts it short, drop the connection: nothing is written and nothing is
+	// forwarded. r.Context() ends when the client goes away only once
+	// net/http has read the request body, so in practice only for requests
+	// without one.
+	if exp != nil && exp.Fault.DelayMS > 0 && !h.faulter.hold(r, exp, p.upstream, r.Context().Done()) {
+		panic(http.ErrAbortHandler)
+	}
+
 	// Fully synthetic faults skip the upstream round trip entirely.
-	if exp != nil && exp.Fault.StreamCutoffTokens == 0 {
+	if exp != nil && isSynthetic(exp.Fault) {
 		h.faulter.writeSyntheticResponse(w, r, exp, p.upstream)
 		return
 	}
 
-	// Pass-through (no fault) or stream-cutoff: forward to the real upstream
-	// at the stripped API path; ModifyResponse applies the cutoff if set.
+	// Pass-through (no fault), delay only or stream-cutoff: forward to the
+	// real upstream at the stripped API path; ModifyResponse applies the
+	// cutoff if set.
 	r.URL.Path = rest
 	ctx := context.WithValue(r.Context(), ctxOriginProvider, p)
 	if exp != nil {

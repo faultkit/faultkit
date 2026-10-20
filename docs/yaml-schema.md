@@ -2,8 +2,9 @@
 
 The schema for `--config <file>.yaml` and the embedded builtin
 scenarios. The v0.1 schema is stable; the `failure` and `provider`
-experiment fields were added **additively** — every existing scenario
-keeps loading unchanged.
+experiment fields and the `delay_ms` and `delay_jitter_ms` fault fields
+were added **additively**, so every existing scenario keeps loading
+unchanged.
 
 ---
 
@@ -85,7 +86,8 @@ narrow to one. Some modes are provider-specific and have only one fixture
 ## Fault
 
 A `Fault` is either HTTP-level or syscall-level. Mixing fields from
-both is a validation error.
+both is a validation error. The [delay](#delay-level-neutral) fields
+belong to neither level and combine with either.
 
 ### HTTP-level fault (proxy mode)
 
@@ -130,6 +132,61 @@ fault:
 |---|---|---|
 | `errno` | string | Symbolic errno name. v0.1 supports `ECONNRESET` (with `match.syscall: recvmsg`) and `EACCES` (with `match.syscall: openat`). |
 
+### Delay (level-neutral)
+
+```yaml
+fault:
+  delay_ms: 8000                       # hold each matched request 8 s
+  delay_jitter_ms: 7000                # optional: plus a random 0–7000 ms
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `delay_ms` | int | Milliseconds faultkit holds a matched request before anything else happens to it. With no other field set, the request is then forwarded unchanged to the real upstream, so the response (streamed or not) starts that much later. With `http_status`, `response_headers` or `response_body`, the synthetic response is sent after the delay and the upstream is never contacted. With `stream_cutoff_tokens`, the request is forwarded after the delay and the stream is cut as usual. |
+| `delay_jitter_ms` | int | Adds a random 0 to `delay_jitter_ms` ms (both ends included), drawn per request. Requires `delay_ms`. |
+
+A delay is level-neutral: it counts as neither an HTTP-level nor a
+syscall-level field, so a delay-only fault is valid and its `match`
+decides what it holds. A delay with an HTTP match runs in proxy mode. A
+delay with a syscall match passes validation, but eBPF mode can't delay a
+syscall yet. The run fails at start (exit `2`) when the delay is on the
+scenario's first syscall experiment, the only one eBPF mode reads, and the
+run uses eBPF mode, which auto mode picks only when the scenario has no
+HTTP experiment. Otherwise the delayed syscall experiment is skipped, like
+any syscall experiment the chosen mode doesn't read.
+
+Both fields must be non-negative, and `delay_ms + delay_jitter_ms` must
+not exceed `300000` (5 minutes).
+
+A delayed request counts as fired once, when its delay starts: a fired
+delay means the hold started. It counts even if the client gave up or the
+run ended before the delay ran out, and then any status, headers, body or
+stream cut meant to follow the delay never reached the client. The report
+doesn't say which part of the fault was applied. What follows the delay
+doesn't add a second event either, so with `stream_cutoff_tokens` the
+delay alone counts as an applied fault, even if the stream never reaches
+the cut point.
+
+When the run ends (the target exits), faultkit cuts every pending delay
+short and drops those connections; a held request is never forwarded
+after that. In base-URL mode, a client that disconnects during the delay
+of a request without a body (such as a `GET`) ends the delay the same
+way. faultkit doesn't notice a client that gives up during the delay of a
+request with a body (a `POST`, as most LLM calls are), or any client in
+forward-proxy mode: if the run is still going when the delay runs out,
+the request is forwarded upstream anyway. For a delay-only fault, or a
+delay with `stream_cutoff_tokens` (also forwarded after its delay), that
+is a real, possibly billed, API call.
+
+In forward-proxy mode the proxy gives each request on a client connection
+5 minutes, counted from when it starts waiting for that request. The
+delay, the upstream call and writing the response all have to fit in
+that window. A delay close to the cap leaves no time for the rest: the
+client sees the connection close instead of a response, yet a request
+that is forwarded after its delay (delay-only, or with
+`stream_cutoff_tokens`) can still reach the upstream, in full or with its
+body cut short.
+
 ## Match
 
 Like `fault`, a `Match` is either HTTP-level or syscall-level — never
@@ -173,7 +230,8 @@ fail:
 - `fault` mixes HTTP-level and syscall-level fields.
 - `match` mixes HTTP-level (`host`/`path`) and syscall-level (`syscall`) fields.
 - `match` is empty.
-- `fault` and `match` disagree on level (e.g. HTTP fault with syscall match).
+- `fault` and `match` disagree on level (e.g. HTTP fault with syscall match). The delay fields have no level, so they never cause this.
+- `delay_ms` or `delay_jitter_ms` is negative, `delay_jitter_ms` is set without `delay_ms`, or `delay_ms + delay_jitter_ms` exceeds `300000`.
 
 Errors come back as exit code `4` (usage error).
 

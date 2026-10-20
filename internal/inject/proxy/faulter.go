@@ -14,6 +14,7 @@ import (
 
 	"github.com/faultkit/faultkit/internal/inject"
 	"github.com/faultkit/faultkit/internal/inject/proxy/fixtures"
+	"github.com/faultkit/faultkit/pkg/faulttypes"
 	"github.com/faultkit/faultkit/pkg/scenario"
 )
 
@@ -25,9 +26,10 @@ const syntheticHeader = "X-Faultkit-Synthetic"
 const ctxKeyExperiment = "faultkit.experiment"
 
 // Faulter is martian's request and response modifier for the proxy
-// injector. It matches against the scenario, rolls the dice, and
-// either skips the upstream round trip (synthetic responses) or wraps
-// the upstream response (streaming-cutoff).
+// injector. It matches against the scenario, rolls the dice, holds the
+// request for the fault's delay if it has one, and then either skips the
+// upstream round trip (synthetic responses), wraps the upstream response
+// (streaming-cutoff), or forwards it unchanged (delay only).
 type Faulter struct {
 	matcher *Matcher
 
@@ -47,6 +49,10 @@ type Faulter struct {
 	// seen counts target requests that reached faultkit (matched or not),
 	// so the CLI can warn when zero traffic arrived. See observe/Seen.
 	seen atomic.Int64
+
+	// stop is closed once, by cancelDelays, to cut every delay short.
+	stop     chan struct{}
+	stopOnce sync.Once
 }
 
 // observe records that one target request reached faultkit.
@@ -66,6 +72,7 @@ func NewFaulter(s *scenario.Scenario, events chan<- inject.Event, rng *rand.Rand
 		matcher: NewMatcher(s),
 		events:  events,
 		rng:     rng,
+		stop:    make(chan struct{}),
 	}
 }
 
@@ -115,9 +122,16 @@ func (f *Faulter) ModifyRequest(req *http.Request) error {
 		return nil
 	}
 	ctx.Set(ctxKeyExperiment, exp)
-	// Stream-cutoff faults need the real upstream response; everything
-	// else is fully synthetic so we can short-circuit the round trip.
-	if exp.Fault.StreamCutoffTokens == 0 {
+	// martian doesn't cancel a request when its client goes away, so only
+	// Stop can cut the delay short here.
+	if exp.Fault.DelayMS > 0 && !f.hold(req, exp, normalizeHost(hostFromRequest(req)), nil) {
+		dropConn(ctx)
+		return nil
+	}
+	// Synthetic faults short-circuit the round trip. A stream cutoff needs
+	// the real upstream response, and a delay-only fault forwards the
+	// request unchanged.
+	if isSynthetic(exp.Fault) {
 		ctx.SkipRoundTrip()
 	}
 	return nil
@@ -144,20 +158,35 @@ func (f *Faulter) ModifyResponse(res *http.Response) error {
 	host := normalizeHost(hostFromRequest(res.Request))
 
 	if exp.Fault.StreamCutoffTokens > 0 {
-		// The cut happens later, on the stream's forwarding goroutine. The
-		// fault fires only if the stream reaches the cut point.
+		// The cut happens later, on the stream's forwarding goroutine.
+		// Without a delay, the fault fires only if the stream reaches the
+		// cut point.
 		wrapStreamCutoff(res, exp.Fault.StreamCutoffTokens, func() {
-			f.emit(res.Request, exp, host)
+			f.emitEffect(res.Request, exp, host)
 		}, func(err error) {
 			f.emitErr(res.Request, exp, host, err)
 		})
 		return nil
 	}
+	if !isSynthetic(exp.Fault) {
+		// Delay only: the delay was the whole fault, and the upstream
+		// response passes through.
+		return nil
+	}
 
 	syn := fixtures.Build(host, exp.Fault)
 	applySynthetic(res, syn)
-	f.emit(res.Request, exp, host)
+	f.emitEffect(res.Request, exp, host)
 	return nil
+}
+
+// isSynthetic reports whether faultkit answers a request for f itself,
+// without the upstream round trip: f sets a status, body or headers and no
+// stream cutoff. A delay-only fault is forwarded after its delay, and a
+// stream cutoff needs the real upstream stream.
+func isSynthetic(f faulttypes.Fault) bool {
+	return f.StreamCutoffTokens == 0 &&
+		(f.HTTPStatus != 0 || len(f.ResponseHeaders) > 0 || f.ResponseBody != "")
 }
 
 func applySynthetic(res *http.Response, syn fixtures.Synthetic) {
@@ -177,10 +206,10 @@ func applySynthetic(res *http.Response, syn fixtures.Synthetic) {
 }
 
 // writeSyntheticResponse renders a fully synthetic fault for exp onto w and
-// emits the fired event. It is the http.ResponseWriter analogue of
-// applySynthetic (which mutates an *http.Response on the forward-proxy
-// path), so base-URL/origin mode renders synthetic faults identically
-// without re-implementing the shape.
+// emits the fired event, unless the fault's delay already did. It is the
+// http.ResponseWriter analogue of applySynthetic (which mutates an
+// *http.Response on the forward-proxy path), so base-URL/origin mode
+// renders synthetic faults identically without re-implementing the shape.
 func (f *Faulter) writeSyntheticResponse(w http.ResponseWriter, req *http.Request, exp *scenario.Experiment, host string) {
 	syn := fixtures.Build(host, exp.Fault)
 	for k, v := range syn.Headers {
@@ -189,7 +218,7 @@ func (f *Faulter) writeSyntheticResponse(w http.ResponseWriter, req *http.Reques
 	w.Header().Set(syntheticHeader, "true")
 	w.WriteHeader(syn.Status)
 	_, _ = w.Write(syn.Body)
-	f.emit(req, exp, host)
+	f.emitEffect(req, exp, host)
 }
 
 func (f *Faulter) emit(req *http.Request, exp *scenario.Experiment, host string) {

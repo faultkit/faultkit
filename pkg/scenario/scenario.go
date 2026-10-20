@@ -5,6 +5,7 @@ package scenario
 import (
 	"errors"
 	"fmt"
+	"reflect"
 
 	"github.com/faultkit/faultkit/pkg/faulttypes"
 )
@@ -97,7 +98,9 @@ func (s *Scenario) Validate() error {
 			// against the fixture catalog at injection time, so a raw
 			// fault/match here is a contradiction. Mode/provider validity is
 			// checked there (this package can't see the provider registry).
-			if exp.Fault.IsHTTP() || exp.Fault.IsSyscall() || exp.Match.IsHTTP() || exp.Match.IsSyscall() {
+			// Any set fault field counts, including level-neutral ones
+			// like delay_ms; Fault holds a map, so compare via reflect.
+			if !reflect.ValueOf(exp.Fault).IsZero() || exp.Match.IsHTTP() || exp.Match.IsSyscall() {
 				return fmt.Errorf("scenario %q experiment %q: %w", s.Name, exp.Name, ErrExperimentMixed)
 			}
 			continue
@@ -111,7 +114,9 @@ func (s *Scenario) Validate() error {
 		if err := exp.Match.Validate(); err != nil {
 			return fmt.Errorf("scenario %q experiment %q: %w", s.Name, exp.Name, err)
 		}
-		if exp.Fault.IsHTTP() != exp.Match.IsHTTP() {
+		// A delay is level-neutral (it holds whatever the match selects), so
+		// only the HTTP and syscall fields must agree with the match.
+		if (exp.Fault.IsHTTP() && !exp.Match.IsHTTP()) || (exp.Fault.IsSyscall() && !exp.Match.IsSyscall()) {
 			return fmt.Errorf("scenario %q experiment %q: fault and match must both be HTTP-level or both syscall-level", s.Name, exp.Name)
 		}
 	}

@@ -158,7 +158,7 @@ Bedrock fixture (OpenAI and Anthropic only). Narrow to one with `--provider`.
 | `max-tokens-truncation` | 200 with truncated content (`finish_reason: length` / `stop_reason: max_tokens`) an agent treats as complete | ✅ |
 | `llm-streaming-cutoff` | Drop the SSE connection mid-stream after N (80) content deltas; fires only on streams that reach N | ✅ |
 | `llm-empty-response` | 200 OK, valid JSON, but no content: `content: null` + `finish_reason: content_filter` (OpenAI), or an empty `content` array with `end_turn` (Anthropic, Bedrock). Applies to non-streaming calls | ✅ |
-| `llm-slow-first-token` | Connection accepted, then 8–15s before the first token | 🛣️ |
+| `llm-slow-first-token` | Hold each request 8–15s, then forward it unchanged: the response (streamed or not) starts late | ✅ |
 | `context-window-overflow` | The provider rejects the request as over the model's context window: HTTP 400 (OpenAI `context_length_exceeded`, Anthropic `prompt is too long`, Bedrock `ValidationException`). Not silent truncation | ✅ |
 | `gateway-timeout` | LiteLLM / Portkey / custom gateway returns slow or hangs | 🛣️ |
 

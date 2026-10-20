@@ -6,7 +6,8 @@ import "sort"
 // concrete response an SDK for that provider would parse. A failure mode is
 // provider-agnostic; the Fixture supplies the per-provider shape (which API
 // path it applies to, the status/headers, and either a verbatim body or a
-// streaming-cutoff token count). The upstream host is not stored here — the
+// streaming-cutoff token count), optionally after a delay; a delay alone
+// forwards the request unchanged. The upstream host is not stored here — the
 // expansion step joins each fixture with the provider registry, which owns
 // hosts. An empty Body for a 4xx/5xx fixture means "synthesize the
 // vendor-accurate error body" via Build at fault time.
@@ -16,6 +17,8 @@ type Fixture struct {
 	Headers            map[string]string
 	Body               string
 	StreamCutoffTokens int
+	DelayMS            int
+	DelayJitterMS      int
 }
 
 // catalog maps failure-mode id → provider id → Fixture. Provider ids must
@@ -34,6 +37,13 @@ var catalog = map[string]map[string]Fixture{
 	"streaming-cutoff": {
 		"openai":    {Path: "/v1/chat/completions", StreamCutoffTokens: 80},
 		"anthropic": {Path: "/v1/messages", StreamCutoffTokens: 80},
+	},
+	// slow-first-token holds the request 8–15 s, then forwards it unchanged,
+	// so the response (streamed or not) starts that much later.
+	"slow-first-token": {
+		"openai":    {Path: "/v1/chat/completions", DelayMS: 8000, DelayJitterMS: 7000},
+		"anthropic": {Path: "/v1/messages", DelayMS: 8000, DelayJitterMS: 7000},
+		"bedrock":   {Path: "/model/*", DelayMS: 8000, DelayJitterMS: 7000},
 	},
 	// overloaded is Anthropic-specific: HTTP 529 overloaded_error has no
 	// OpenAI equivalent. Body synthesized from the anthropic 529 fixture.

@@ -37,6 +37,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   narrow it. Both providers are forward-proxy only and REST only: `--base-url`
   doesn't target them, and gRPC clients that honour the proxy settings fail
   to connect, because the proxy only speaks HTTP/1.1.
+- **`llm-slow-first-token` scenario** (`slow-first-token` failure mode, for
+  OpenAI, Anthropic and Bedrock). faultkit holds each matched request for
+  8–15 s, then forwards it unchanged, so the response starts late, streamed
+  or not.
+- **`delay_ms` and `delay_jitter_ms` fault fields.** A delay holds a matched
+  request before the rest of the fault applies; on its own, it forwards the
+  request after the delay. Delays are level-neutral, so a delay-only fault is
+  valid. The total is capped at 5 minutes. A delayed request counts as fired
+  once, when its delay starts: a fired delay means the hold started. It
+  counts even if the client gave up or the run ended before the delay ran
+  out, and then any status, body or stream cut meant to follow it never
+  reached the client; the report doesn't say which part was applied. The run
+  ending cuts pending delays short and drops those requests instead of
+  forwarding them. A client that gives up during the delay of a `POST` isn't
+  noticed, so a delay-only fault, or a delay with `stream_cutoff_tokens`,
+  still forwards the request when the delay runs out: a real, possibly
+  billed, API call. eBPF mode refuses a delay on the syscall experiment it
+  runs, for now. The fields are left out of the report's event JSON when
+  unset, so `report/v1` output for existing scenarios is unchanged.
+
+### Changed
+
+- **A fixture-driven experiment with any `fault` field set now fails to
+  load.** Combining `failure:` with a fault field that has a non-zero value,
+  even a meaningless one such as `response_headers: {}` or
+  `stream_cutoff_tokens: -1`, used to load and silently ignore the fault. It
+  is now rejected as mixing a failure mode with a raw fault (exit `4`).
+  `fault: {}` still loads.
 
 ### Fixed
 

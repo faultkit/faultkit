@@ -50,6 +50,7 @@ embeddings-degraded          [proxy]  Embeddings endpoint returns HTTP 503 (Open
 flaky-network                [ebpf]   Inject ECONNRESET on TCP recv, simulating flaky network conditions.
 llm-api-degraded             [proxy]  Rate-limit requests to OpenAI and Anthropic (HTTP 429, Retry-After 30) and Bedrock (HTTP 429 ThrottlingException).
 llm-empty-response           [proxy]  LLM returns 200 with no usable content (OpenAI content null with finish_reason content_filter; Anthropic and Bedrock empty content with stop reason end_turn).
+llm-slow-first-token         [proxy]  LLM requests are held 8–15s before they reach the provider, so the response (streamed or not) starts that much later.
 llm-streaming-cutoff         [proxy]  Streaming chat completion drops the connection mid-token (OpenAI SSE without [DONE]; Anthropic SSE without message_stop).
 malformed-json-response      [proxy]  LLM returns 200 OK with syntactically invalid JSON in the body.
 malformed-tool-use           [proxy]  LLM returns a tool call with malformed or schema-violating arguments, breaking tool dispatch.

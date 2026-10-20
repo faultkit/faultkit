@@ -72,6 +72,11 @@ func (i *Injector) Start(_ context.Context, s *scenario.Scenario) ([]string, err
 	if err != nil {
 		return nil, err
 	}
+	// No eBPF program delays a syscall yet. Refuse rather than inject the
+	// errno (or nothing) and silently skip the delay.
+	if exp.Fault.DelayMS != 0 || exp.Fault.DelayJitterMS != 0 {
+		return nil, fmt.Errorf("ebpf: experiment %q: delay_ms is not supported for syscall faults", exp.Name)
+	}
 
 	i.probabilityPerThousand = uint32(exp.Probability * 1000)
 	i.scenarioName = s.Name
